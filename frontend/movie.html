@@ -1,0 +1,434 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>КиноВселенная — Фильм</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <div class="bg-glow"></div>
+
+    <header class="header">
+        <div class="header-inner">
+            <a href="index.html" class="logo">
+                <span class="logo-icon">&#9654;</span>
+                КиноВселенная
+            </a>
+            <div class="search-box">
+                <span class="search-icon">&#128269;</span>
+                <input type="search" placeholder="Поиск фильмов..." id="searchInput">
+                <button type="button" class="voice-btn" title="Голосовой поиск">&#127908;</button>
+            </div>
+            <div class="header-actions"></div>
+        </div>
+    </header>
+
+    <div class="voice-overlay">
+        <div class="voice-ring"><span class="mic-icon">&#127908;</span></div>
+        <div class="voice-text">Слушаю...</div>
+        <div class="voice-hint">Скажите название фильма или жанр</div>
+    </div>
+
+    <main class="main">
+        <div class="container">
+            <div id="movieHero" class="hero">
+                <div class="hero-bg-wrap" style="position: absolute; inset: 0;">
+                    <img class="hero-bg" src="" alt="" id="heroBg">
+                </div>
+                <div class="hero-overlay"></div>
+                <div class="hero-content" style="display: flex; gap: 24px; flex-wrap: wrap; align-items: flex-start;">
+                    <div class="movie-poster-wrap" style="flex-shrink: 0; width: clamp(140px, 20vw, 220px); aspect-ratio: 2/3; border-radius: var(--radius-lg); overflow: hidden;">
+                        <img id="heroPoster" src="" alt="" style="width: 100%; height: 100%; object-fit: cover;">
+                    </div>
+                    <div style="flex: 1; min-width: 200px;">
+                        <h1 class="hero-title" id="movieTitle">Загрузка...</h1>
+                        <p class="hero-meta" id="movieOriginalTitle" style="margin-bottom: 8px;"></p>
+                        <div class="hero-meta" id="movieMeta"></div>
+                        <p class="hero-description" id="movieDesc"></p>
+                        <div class="hero-actions" style="flex-wrap: wrap; gap: 12px;">
+                            <a href="#" id="btnBuy" class="btn btn-primary">Купить билет</a>
+                            <button type="button" id="btnWatchlist" class="btn btn-secondary">Хочу посмотреть</button>
+                            <div class="rating-stars-wrap" style="display: flex; align-items: center; gap: 8px;">
+                                <span style="font-size: 0.85rem; color: var(--color-text-secondary);">Оценить:</span>
+                                <div id="ratingStars" style="display: flex; gap: 4px;"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="tabs">
+                <button type="button" class="tab active" data-tab="screenings">Сеансы</button>
+                <button type="button" class="tab" data-tab="reviews">Отзывы</button>
+                <button type="button" class="tab" data-tab="comments">Обсуждение</button>
+            </div>
+
+            <div id="tabScreenings" class="tab-panel active">
+                <div id="screeningsList"></div>
+            </div>
+
+            <div id="tabReviews" class="tab-panel" style="display: none;">
+                <div id="reviewsList"></div>
+                <div class="glass-card" style="padding: 24px; margin-top: 16px;">
+                    <h4 style="margin-bottom: 12px;">Добавить отзыв</h4>
+                    <textarea id="reviewText" rows="4" class="form-group" style="width: 100%; padding: 12px; background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-sm); color: var(--color-text); font-family: var(--font); margin-bottom: 12px; resize: vertical;" placeholder="Напишите ваш отзыв..."></textarea>
+                    <button type="button" id="btnSubmitReview" class="btn btn-primary">Отправить</button>
+                </div>
+            </div>
+
+            <div id="tabComments" class="tab-panel" style="display: none;">
+                <div id="commentsList"></div>
+                <div class="glass-card" style="padding: 24px; margin-top: 16px;">
+                    <h4 style="margin-bottom: 12px;">Добавить комментарий</h4>
+                    <textarea id="commentText" rows="3" class="form-group" style="width: 100%; padding: 12px; background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-sm); color: var(--color-text); font-family: var(--font); margin-bottom: 12px; resize: vertical;" placeholder="Напишите комментарий..."></textarea>
+                    <button type="button" id="btnSubmitComment" class="btn btn-primary">Отправить</button>
+                </div>
+            </div>
+
+            <section class="section" style="margin-top: 48px;">
+                <h2 class="section-title">Похожие фильмы</h2>
+                <div class="movies-row" id="similarMovies"></div>
+            </section>
+        </div>
+    </main>
+
+    <footer class="footer">
+        <div class="footer-inner">
+            <div class="footer-col">
+                <h4>КиноВселенная</h4>
+                <a href="catalog.html">Каталог</a>
+                <a href="auth.html">Войти</a>
+            </div>
+            <div class="footer-col">
+                <h4>Поддержка</h4>
+                <a href="#">Помощь</a>
+                <a href="#">Контакты</a>
+            </div>
+        </div>
+        <div class="footer-bottom">© КиноВселенная. Премиум онлайн-кинотеатр.</div>
+    </footer>
+
+    <script src="js/api.js"></script>
+    <script src="js/ui-kit.js"></script>
+    <script src="js/animations.js"></script>
+    <script src="js/voice-assistant.js"></script>
+    <script>
+(function() {
+    const movieId = getQueryParam('id');
+    if (!movieId) {
+        window.location.href = 'catalog.html';
+        return;
+    }
+
+    let movie = null;
+    let screenings = [];
+    let reviews = [];
+    let comments = [];
+    let similar = [];
+
+    const POSTER_OVERRIDES = {
+        'красавица': 'https://prizmacinema.by/img/films/23863/23863.jpg',
+        'король и шут': 'https://www.kino-teatr.ru/movie/poster/188826/275282.jpg',
+        'наследник': 'https://avatars.mds.yandex.net/get-kinopoisk-image/10809116/65770385-b8af-4adc-b4dc-a5859b9f52b8/600x900',
+        'королева ринга': 'https://kinogo.ec/uploads/posts/2025-05/1746802698_queen-of-the-ring.png',
+        'грозовой перевал': 'https://avatars.mds.yandex.net/get-kinopoisk-image/4716873/ad2061c9-f922-4c0a-805e-751b70ea0428/600x900'
+    };
+
+    function getPosterOverride(m) {
+        if (!m || !m.title) return null;
+        const title = m.title.toLowerCase();
+        for (const key in POSTER_OVERRIDES) {
+            if (Object.prototype.hasOwnProperty.call(POSTER_OVERRIDES, key) && title.includes(key)) {
+                return POSTER_OVERRIDES[key];
+            }
+        }
+        return null;
+    }
+
+    const heroBg = document.getElementById('heroBg');
+    const heroPoster = document.getElementById('heroPoster');
+    const movieTitle = document.getElementById('movieTitle');
+    const movieOriginalTitle = document.getElementById('movieOriginalTitle');
+    const movieMeta = document.getElementById('movieMeta');
+    const movieDesc = document.getElementById('movieDesc');
+    const btnBuy = document.getElementById('btnBuy');
+    const btnWatchlist = document.getElementById('btnWatchlist');
+    const ratingStars = document.getElementById('ratingStars');
+    const screeningsList = document.getElementById('screeningsList');
+    const reviewsList = document.getElementById('reviewsList');
+    const commentsList = document.getElementById('commentsList');
+    const similarMovies = document.getElementById('similarMovies');
+    const reviewText = document.getElementById('reviewText');
+    const commentText = document.getElementById('commentText');
+    const btnSubmitReview = document.getElementById('btnSubmitReview');
+    const btnSubmitComment = document.getElementById('btnSubmitComment');
+
+    function formatDate(d) {
+        const dt = new Date(d);
+        return dt.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' });
+    }
+    function formatTime(d) {
+        return new Date(d).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+    }
+
+    async function loadData() {
+        try {
+            [movie, screenings, reviews, comments, similar] = await Promise.all([
+                api.get(`/movies/${movieId}`),
+                api.get(`/movies/${movieId}/screenings`),
+                api.get(`/movies/${movieId}/reviews`),
+                api.get(`/movies/${movieId}/comments`),
+                api.get(`/movies/${movieId}/similar`)
+            ]);
+        } catch (e) {
+            showToast('Ошибка загрузки: ' + e.message, 'error');
+            return;
+        }
+
+        renderMovie();
+        renderScreenings();
+        renderReviews();
+        renderComments();
+        renderSimilar();
+    }
+
+    function renderMovie() {
+        const overridePoster = getPosterOverride(movie);
+        const bg = movie.backgroundUrl || overridePoster || movie.posterUrl || 'https://picsum.photos/seed/m' + movieId + '/1920/1080';
+        heroBg.src = bg;
+        heroBg.alt = movie.title;
+        heroPoster.src = overridePoster || movie.posterUrl || 'https://picsum.photos/seed/p' + movieId + '/400/600';
+        heroPoster.alt = movie.title;
+        movieTitle.textContent = movie.title;
+        movieOriginalTitle.textContent = movie.originalTitle || '';
+        movieOriginalTitle.style.display = movie.originalTitle ? 'block' : 'none';
+
+        const metaParts = [
+            movie.year,
+            movie.duration ? movie.duration + ' мин' : '',
+            movie.ageRating || '',
+            `<span class="rating">★ ${(movie.averageRating || 0).toFixed(1)}</span>`,
+            (movie.genres || []).join(', ')
+        ].filter(Boolean);
+        movieMeta.innerHTML = metaParts.join('<span class="separator"></span>');
+        movieDesc.textContent = movie.description || '';
+
+        btnBuy.href = `booking.html?movieId=${movieId}`;
+
+        for (let i = 1; i <= 10; i++) {
+            const star = document.createElement('button');
+            star.type = 'button';
+            star.className = 'btn btn-ghost btn-sm';
+            star.style.cssText = 'padding: 4px 6px; font-size: 1rem;';
+            star.textContent = '★';
+            star.dataset.score = i;
+            star.title = 'Оценить ' + i;
+            star.addEventListener('click', () => submitRating(i));
+            ratingStars.appendChild(star);
+        }
+    }
+
+    function renderScreenings() {
+        const byDate = {};
+        (screenings || []).forEach(s => {
+            const d = new Date(s.startTime).toDateString();
+            if (!byDate[d]) byDate[d] = [];
+            byDate[d].push(s);
+        });
+
+        let html = '';
+        Object.entries(byDate).forEach(([dateStr, items]) => {
+            const dt = new Date(dateStr);
+            const dateLabel = dt.toLocaleDateString('ru-RU', { weekday: 'long', day: 'numeric', month: 'long' });
+            html += `<h4 style="margin: 24px 0 12px; font-size: 1rem; color: var(--color-text-secondary);">${dateLabel}</h4>`;
+            items.forEach(s => {
+                html += `
+                <div class="glass-card" style="padding: 16px; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
+                    <div>
+                        <strong>${formatTime(s.startTime)}</strong> · ${s.hallName || 'Зал'} · ${s.format || '2D'} · ${(s.basePrice || 0).toFixed(0)} BYN
+                    </div>
+                    <a href="booking.html?screeningId=${s.id}&movieId=${movieId}" class="btn btn-primary btn-sm">Выбрать</a>
+                </div>`;
+            });
+        });
+        screeningsList.innerHTML = html || '<p style="color: var(--color-text-muted);">Сеансов пока нет</p>';
+    }
+
+    function renderReviews() {
+        let html = '';
+        (reviews || []).forEach(r => {
+            const d = new Date(r.createdAt).toLocaleDateString('ru-RU');
+            html += `
+            <div class="review-card glass-card">
+                <div class="review-header">
+                    <div class="review-avatar">${(r.userName || '').substring(0, 2).toUpperCase()}</div>
+                    <div>
+                        <span class="review-author">${r.userName || 'Пользователь'}</span>
+                        <span class="review-date">${d}</span>
+                    </div>
+                </div>
+                <div class="review-text">${escapeHtml(r.text)}</div>
+            </div>`;
+        });
+        reviewsList.innerHTML = html || '<p style="color: var(--color-text-muted);">Пока нет отзывов</p>';
+    }
+
+    function renderComments() {
+        function renderComment(c, indent = 0) {
+            const d = new Date(c.createdAt).toLocaleDateString('ru-RU');
+            const style = indent ? 'margin-left: 40px; margin-top: 8px;' : '';
+            let html = `
+            <div class="comment-card glass-card" style="${style}">
+                <div class="comment-header">
+                    <div class="comment-avatar">${(c.userName || '').substring(0, 2).toUpperCase()}</div>
+                    <div>
+                        <span class="comment-author">${c.userName || 'Пользователь'}</span>
+                        <span class="comment-date">${d}</span>
+                    </div>
+                </div>
+                <div class="comment-text">${escapeHtml(c.text)}</div>
+            </div>`;
+            (c.replies || []).forEach(reply => {
+                html += renderComment(reply, indent + 1);
+            });
+            return html;
+        }
+        let html = '';
+        (comments || []).forEach(c => {
+            if (!c.parentCommentId) html += renderComment(c);
+        });
+        commentsList.innerHTML = html || '<p style="color: var(--color-text-muted);">Пока нет комментариев</p>';
+    }
+
+    function renderSimilar() {
+        similarMovies.innerHTML = '';
+        (similar || []).forEach(m => {
+            const card = createMovieCard(m);
+            similarMovies.appendChild(card);
+        });
+    }
+
+    function escapeHtml(s) {
+        const div = document.createElement('div');
+        div.textContent = s;
+        return div.innerHTML;
+    }
+
+    async function addToWatchlist() {
+        if (!api.isAuthenticated) {
+            showToast('Войдите, чтобы добавить в список', 'error');
+            window.location.href = 'auth.html?return=' + encodeURIComponent(window.location.href);
+            return;
+        }
+        try {
+            const lists = await api.get('/lists');
+            let wantList = lists.find(l => l.type === 'WantToWatch');
+            if (!wantList) {
+                wantList = await api.post('/lists', { name: 'Хочу посмотреть', type: 'WantToWatch' });
+            }
+            await api.post(`/lists/${wantList.id}/items`, { movieId: parseInt(movieId, 10) });
+            showToast('Добавлено в «Хочу посмотреть»', 'success');
+            btnWatchlist.disabled = true;
+            btnWatchlist.textContent = 'В списке';
+        } catch (e) {
+            if (e.message && e.message.includes('already in list')) {
+                showToast('Уже в списке', 'info');
+                btnWatchlist.disabled = true;
+                btnWatchlist.textContent = 'В списке';
+            } else {
+                showToast('Ошибка: ' + e.message, 'error');
+            }
+        }
+    }
+
+    async function submitRating(score) {
+        if (!api.isAuthenticated) {
+            showToast('Войдите, чтобы оценить', 'error');
+            window.location.href = 'auth.html?return=' + encodeURIComponent(window.location.href);
+            return;
+        }
+        try {
+            await api.post(`/movies/${movieId}/ratings`, { score });
+            showToast('Спасибо за оценку!', 'success');
+        } catch (e) {
+            showToast('Ошибка: ' + e.message, 'error');
+        }
+    }
+
+    async function submitReview() {
+        if (!api.isAuthenticated) {
+            showToast('Войдите, чтобы оставить отзыв', 'error');
+            window.location.href = 'auth.html?return=' + encodeURIComponent(window.location.href);
+            return;
+        }
+        const text = reviewText.value.trim();
+        if (!text) {
+            showToast('Введите текст отзыва', 'error');
+            return;
+        }
+        try {
+            await api.post(`/movies/${movieId}/reviews`, { text });
+            showToast('Отзыв добавлен', 'success');
+            reviewText.value = '';
+            reviews = await api.get(`/movies/${movieId}/reviews`);
+            renderReviews();
+        } catch (e) {
+            showToast('Ошибка: ' + e.message, 'error');
+        }
+    }
+
+    async function submitComment() {
+        if (!api.isAuthenticated) {
+            showToast('Войдите, чтобы оставить комментарий', 'error');
+            window.location.href = 'auth.html?return=' + encodeURIComponent(window.location.href);
+            return;
+        }
+        const text = commentText.value.trim();
+        if (!text) {
+            showToast('Введите текст комментария', 'error');
+            return;
+        }
+        try {
+            await api.post(`/movies/${movieId}/comments`, { text });
+            showToast('Комментарий добавлен', 'success');
+            commentText.value = '';
+            comments = await api.get(`/movies/${movieId}/comments`);
+            renderComments();
+        } catch (e) {
+            showToast('Ошибка: ' + e.message, 'error');
+        }
+    }
+
+    document.querySelectorAll('.tab').forEach(t => {
+        t.addEventListener('click', () => {
+            document.querySelectorAll('.tab').forEach(x => x.classList.remove('active'));
+            document.querySelectorAll('.tab-panel').forEach(p => {
+                p.style.display = 'none';
+                p.classList.remove('active');
+            });
+            t.classList.add('active');
+            const panel = document.getElementById('tab' + t.dataset.tab.charAt(0).toUpperCase() + t.dataset.tab.slice(1));
+            if (panel) {
+                panel.style.display = 'block';
+                panel.classList.add('active');
+            }
+        });
+    });
+
+    btnWatchlist.addEventListener('click', addToWatchlist);
+    btnSubmitReview.addEventListener('click', submitReview);
+    btnSubmitComment.addEventListener('click', submitComment);
+
+    document.getElementById('searchInput').addEventListener('keydown', e => {
+        if (e.key === 'Enter') {
+            const q = e.target.value.trim();
+            if (q) window.location.href = 'catalog.html?search=' + encodeURIComponent(q);
+        }
+    });
+
+    loadData();
+})();
+    </script>
+</body>
+</html>

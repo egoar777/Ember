@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Профиль | КиноВселенная</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <div class="bg-glow"></div>
+
+    <header class="header">
+        <div class="header-inner">
+            <a href="index.html" class="logo">
+                <span class="logo-icon">&#9654;</span>
+                КиноВселенная
+            </a>
+            <div class="search-box">
+                <span class="search-icon">&#128269;</span>
+                <input type="search" placeholder="Поиск фильмов..." id="searchInput">
+                <button type="button" class="voice-btn" title="Голосовой поиск">&#127908;</button>
+            </div>
+            <div class="header-actions"></div>
+        </div>
+    </header>
+
+    <div class="voice-overlay">
+        <div class="voice-ring"><span class="mic-icon">&#127908;</span></div>
+        <div class="voice-text">Слушаю...</div>
+        <div class="voice-hint">Нажмите снова или кликните вне области для выхода</div>
+    </div>
+
+    <main class="main">
+        <div class="container">
+            <div class="glass-card profile-header section">
+                <div class="profile-avatar-lg" id="profileAvatar">--</div>
+                <div class="profile-info">
+                    <h2 id="profileName">Загрузка...</h2>
+                    <p id="profileEmail">—</p>
+                    <p id="profileRole" style="font-size: 0.8rem; color: var(--color-primary-light);">—</p>
+                </div>
+            </div>
+
+            <div class="tabs profile-tabs">
+                <button type="button" class="tab active" data-tab="tickets">Мои билеты</button>
+                <button type="button" class="tab" data-tab="lists">Списки</button>
+                <button type="button" class="tab" data-tab="settings">Настройки</button>
+            </div>
+
+            <div id="ticketsPanel" class="tab-panel">
+                <div id="ticketsList"></div>
+                <p id="ticketsEmpty" class="empty-state" style="display: none; color: var(--color-text-secondary); text-align: center; padding: 40px;">У вас пока нет билетов</p>
+            </div>
+
+            <div id="listsPanel" class="tab-panel" style="display: none;">
+                <button type="button" class="btn btn-primary btn-sm" id="createListBtn" style="margin-bottom: 20px;">Создать список</button>
+                <div id="listsContainer"></div>
+            </div>
+
+            <div id="settingsPanel" class="tab-panel" style="display: none;">
+                <form id="settingsForm" class="glass-card" style="padding: 24px; max-width: 480px;">
+                    <div class="form-group">
+                        <label for="settingsDisplayName">Имя</label>
+                        <input type="text" id="settingsDisplayName" placeholder="Ваше имя">
+                    </div>
+                    <div class="form-group">
+                        <label for="settingsNotifications">Уведомления (JSON или текст)</label>
+                        <input type="text" id="settingsNotifications" placeholder='{"email": true, "sms": false}'>
+                    </div>
+                    <button type="submit" class="btn btn-primary">Сохранить</button>
+                    <button type="button" class="btn btn-secondary" id="logoutBtn" style="margin-left: 12px;">Выйти</button>
+                </form>
+            </div>
+        </div>
+    </main>
+
+    <footer class="footer">
+        <div class="footer-inner">
+            <div class="footer-col">
+                <h4>КиноВселенная</h4>
+                <a href="index.html">Главная</a>
+                <a href="catalog.html">Каталог</a>
+                <a href="exclusive.html">Эксклюзив</a>
+            </div>
+            <div class="footer-col">
+                <h4>Помощь</h4>
+                <a href="#">Контакты</a>
+                <a href="#">FAQ</a>
+            </div>
+        </div>
+        <div class="footer-bottom">&copy; 2025 КиноВселенная. Все права защищены.</div>
+    </footer>
+
+    <script src="js/api.js"></script>
+    <script src="js/ui-kit.js"></script>
+    <script src="js/animations.js"></script>
+    <script src="js/voice-assistant.js"></script>
+    <script>
+        (function() {
+            if (!api.isAuthenticated) {
+                window.location.href = 'auth.html?returnUrl=' + encodeURIComponent('profile.html');
+                return;
+            }
+
+            let profile = null;
+            let bookings = [];
+            let lists = [];
+
+            const tabBtns = document.querySelectorAll('.profile-tabs .tab');
+            const panels = { tickets: document.getElementById('ticketsPanel'), lists: document.getElementById('listsPanel'), settings: document.getElementById('settingsPanel') };
+
+            tabBtns.forEach(btn => {
+                btn.addEventListener('click', () => {
+                    tabBtns.forEach(b => b.classList.remove('active'));
+                    btn.classList.add('active');
+                    const key = btn.dataset.tab;
+                    Object.keys(panels).forEach(k => panels[k].style.display = k === key ? '' : 'none');
+                    if (key === 'lists') loadLists();
+                });
+            });
+
+            async function loadProfile() {
+                try {
+                    profile = await api.get('/profile');
+                    document.getElementById('profileAvatar').textContent = (profile.displayName || 'U').split(' ').map(w => w[0]).join('').substring(0, 2).toUpperCase();
+                    document.getElementById('profileName').textContent = profile.displayName || profile.email;
+                    document.getElementById('profileEmail').textContent = profile.email;
+                    document.getElementById('profileRole').textContent = profile.role || 'Пользователь';
+                    document.getElementById('settingsDisplayName').value = profile.displayName || '';
+                    document.getElementById('settingsNotifications').value = profile.notificationSettings || '';
+                } catch (err) {
+                    showToast('Ошибка загрузки профиля: ' + err.message, 'error');
+                }
+            }
+
+            async function loadBookings() {
+                try {
+                    bookings = await api.get('/bookings/my');
+                    const container = document.getElementById('ticketsList');
+                    const empty = document.getElementById('ticketsEmpty');
+                    container.innerHTML = '';
+                    if (!bookings.length) {
+                        empty.style.display = 'block';
+                        return;
+                    }
+                    empty.style.display = 'none';
+                    bookings.forEach(b => {
+                        const card = document.createElement('div');
+                        card.className = 'glass-card booking-card';
+                        const statusMap = { Paid: ['status-paid', 'Оплачен'], Pending: ['status-pending', 'Ожидает оплаты'], Cancelled: ['status-cancelled', 'Отменён'], Expired: ['status-cancelled', 'Истёк'] };
+                        const [statusClass, statusText] = statusMap[b.status] || ['status-cancelled', b.status];
+                        const seatsText = (b.seats || []).map(s => `Ряд ${s.row} Место ${s.number}`).join(', ');
+                        card.innerHTML = `
+                            <div>
+                                <strong>${b.movieTitle || 'Фильм'}</strong>
+                                <div style="font-size: 0.85rem; color: var(--color-text-secondary); margin-top: 4px;">
+                                    ${new Date(b.startTime).toLocaleString('ru-RU')} · ${b.hallName || '—'}
+                                </div>
+                                <div style="margin-top: 8px;">
+                                    <span class="status ${statusClass}">${statusText}</span>
+                                    ${seatsText ? `<span style="margin-left: 8px; font-size: 0.8rem;">${seatsText}</span>` : ''}
+                                </div>
+                                <div style="margin-top: 8px; font-weight: 600; color: var(--color-primary-light);">${b.totalPrice} BYN</div>
+                            </div>
+                            <div style="display: flex; gap: 8px; align-items: center;">
+                                ${b.status === 'Pending' ? `
+                                    <button type="button" class="btn btn-primary btn-sm btn-confirm-payment" data-id="${b.id}">Оплатить</button>
+                                    <button type="button" class="btn btn-secondary btn-sm btn-cancel-booking" data-id="${b.id}">Отменить</button>
+                                ` : b.status === 'Paid' ? '' : ''}
+                            </div>
+                        `;
+                        container.appendChild(card);
+                    });
+                    container.querySelectorAll('.btn-cancel-booking').forEach(btn => {
+                        btn.addEventListener('click', async () => {
+                            try {
+                                await api.post(`/bookings/${btn.dataset.id}/cancel`, {});
+                                showToast('Бронирование отменено', 'success');
+                                loadBookings();
+                            } catch (e) { showToast(e.message, 'error'); }
+                        });
+                    });
+                    container.querySelectorAll('.btn-confirm-payment').forEach(btn => {
+                        btn.addEventListener('click', async () => {
+                            try {
+                                await api.post(`/bookings/${btn.dataset.id}/confirm-payment`, {});
+                                showToast('Оплачено', 'success');
+                                loadBookings();
+                            } catch (e) { showToast(e.message, 'error'); }
+                        });
+                    });
+                } catch (err) {
+                    showToast('Ошибка загрузки билетов: ' + err.message, 'error');
+                    document.getElementById('ticketsEmpty').style.display = 'block';
+                }
+            }
+
+            async function loadLists() {
+                try {
+                    lists = await api.get('/lists');
+                    const container = document.getElementById('listsContainer');
+                    container.innerHTML = '';
+                    for (const list of lists) {
+                        let items = [];
+                        try { items = await api.get(`/lists/${list.id}/items`); } catch { /* ignore */ }
+                        const card = document.createElement('div');
+                        card.className = 'glass-card';
+                        card.style.cssText = 'padding: 20px; margin-bottom: 16px;';
+                        const thumbs = items.slice(0, 5).map(i => `
+                            <img src="${i.posterUrl || 'https://picsum.photos/seed/' + i.movieId + '/80/120'}" alt="" style="width: 48px; height: 72px; object-fit: cover; border-radius: 6px;" loading="lazy">
+                        `).join('');
+                        card.innerHTML = `
+                            <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 12px;">
+                                <strong>${list.name}</strong>
+                            </div>
+                            <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px;">
+                                ${thumbs || '<span style="color: var(--color-text-muted); font-size: 0.85rem;">Пусто</span>'}
+                            </div>
+                            <div class="list-items" data-list-id="${list.id}"></div>
+                        `;
+                        const itemsEl = card.querySelector('.list-items');
+                        items.forEach(item => {
+                            const row = document.createElement('div');
+                            row.style.cssText = 'display: flex; align-items: center; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid var(--color-border);';
+                            row.innerHTML = `
+                                <a href="movie.html?id=${item.movieId}" style="color: var(--color-text);">${item.movieTitle}</a>
+                                <button type="button" class="btn btn-ghost btn-sm btn-remove-item" data-list-id="${list.id}" data-item-id="${item.id}">Удалить</button>
+                            `;
+                            itemsEl.appendChild(row);
+                        });
+                        container.appendChild(card);
+                    }
+                    container.querySelectorAll('.btn-remove-item').forEach(btn => {
+                        btn.addEventListener('click', async () => {
+                            try {
+                                await api.del(`/lists/${btn.dataset.listId}/items/${btn.dataset.itemId}`);
+                                showToast('Удалено из списка', 'success');
+                                loadLists();
+                            } catch (e) { showToast(e.message, 'error'); }
+                        });
+                    });
+                } catch (err) {
+                    showToast('Ошибка загрузки списков: ' + err.message, 'error');
+                }
+            }
+
+            document.getElementById('createListBtn').addEventListener('click', async () => {
+                const name = prompt('Название списка:');
+                if (!name?.trim()) return;
+                try {
+                    await api.post('/lists', { name: name.trim(), type: 'Custom' });
+                    showToast('Список создан', 'success');
+                    loadLists();
+                } catch (e) { showToast(e.message, 'error'); }
+            });
+
+            document.getElementById('settingsForm').addEventListener('submit', async (e) => {
+                e.preventDefault();
+                try {
+                    await api.put('/profile', {
+                        displayName: document.getElementById('settingsDisplayName').value.trim() || null,
+                        notificationSettings: document.getElementById('settingsNotifications').value.trim() || null
+                    });
+                    showToast('Настройки сохранены', 'success');
+                    loadProfile();
+                } catch (err) { showToast(err.message, 'error'); }
+            });
+
+            document.getElementById('logoutBtn').addEventListener('click', async () => {
+                await api.logout();
+                window.location.href = 'index.html';
+            });
+
+            document.querySelector('.search-box input').addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    const q = document.getElementById('searchInput').value.trim();
+                    if (q) window.location.href = 'catalog.html?search=' + encodeURIComponent(q);
+                }
+            });
+
+            loadProfile();
+            loadBookings();
+        })();
+    </script>
+</body>
+</html>

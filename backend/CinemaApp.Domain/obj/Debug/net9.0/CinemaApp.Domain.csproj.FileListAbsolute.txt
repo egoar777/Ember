@@ -1,0 +1,11 @@
+/Users/egorkhmylkov/Desktop/проект уп/backend/CinemaApp.Domain/bin/Debug/net9.0/CinemaApp.Domain.deps.json
+/Users/egorkhmylkov/Desktop/проект уп/backend/CinemaApp.Domain/bin/Debug/net9.0/CinemaApp.Domain.dll
+/Users/egorkhmylkov/Desktop/проект уп/backend/CinemaApp.Domain/bin/Debug/net9.0/CinemaApp.Domain.pdb
+/Users/egorkhmylkov/Desktop/проект уп/backend/CinemaApp.Domain/obj/Debug/net9.0/CinemaApp.Domain.GeneratedMSBuildEditorConfig.editorconfig
+/Users/egorkhmylkov/Desktop/проект уп/backend/CinemaApp.Domain/obj/Debug/net9.0/CinemaApp.Domain.AssemblyInfoInputs.cache
+/Users/egorkhmylkov/Desktop/проект уп/backend/CinemaApp.Domain/obj/Debug/net9.0/CinemaApp.Domain.AssemblyInfo.cs
+/Users/egorkhmylkov/Desktop/проект уп/backend/CinemaApp.Domain/obj/Debug/net9.0/CinemaApp.Domain.csproj.CoreCompileInputs.cache
+/Users/egorkhmylkov/Desktop/проект уп/backend/CinemaApp.Domain/obj/Debug/net9.0/CinemaApp.Domain.dll
+/Users/egorkhmylkov/Desktop/проект уп/backend/CinemaApp.Domain/obj/Debug/net9.0/refint/CinemaApp.Domain.dll
+/Users/egorkhmylkov/Desktop/проект уп/backend/CinemaApp.Domain/obj/Debug/net9.0/CinemaApp.Domain.pdb
+/Users/egorkhmylkov/Desktop/проект уп/backend/CinemaApp.Domain/obj/Debug/net9.0/ref/CinemaApp.Domain.dll

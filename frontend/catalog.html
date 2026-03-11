@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Каталог фильмов — КиноВселенная</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <div class="bg-glow"></div>
+
+    <header class="header">
+        <div class="header-inner">
+            <a href="index.html" class="logo">
+                <div class="logo-icon">▶</div>
+                КиноВселенная
+            </a>
+            <div class="search-box">
+                <span class="search-icon">&#128269;</span>
+                <input type="text" placeholder="Поиск фильмов..." id="header-search" autocomplete="off">
+                <button type="button" class="voice-btn" title="Голосовой поиск">&#127908;</button>
+            </div>
+            <div class="header-actions">
+                <a href="auth.html" class="btn btn-primary btn-sm">Войти</a>
+            </div>
+        </div>
+    </header>
+
+    <main class="main">
+        <div class="container">
+            <h1 class="section-title" style="margin-bottom: 24px;">Каталог фильмов</h1>
+
+            <div id="ai-query-banner" class="glass-card" style="display: none; padding: 12px 20px; margin-bottom: 20px;">
+                <span id="ai-query-text" style="color: var(--color-text-secondary); font-size: 0.9rem;"></span>
+            </div>
+
+            <div class="filters-bar" id="genres-bar">
+                <span style="color: var(--color-text-secondary); font-size: 0.85rem; align-self: center;">Жанры:</span>
+            </div>
+            <div class="filters-bar" id="platforms-bar">
+                <span style="color: var(--color-text-secondary); font-size: 0.85rem; align-self: center;">Платформы:</span>
+            </div>
+            <div class="filters-bar">
+                <span style="color: var(--color-text-secondary); font-size: 0.85rem; align-self: center;">Рейтинг:</span>
+                <button type="button" class="filter-chip" data-rating="6">6+</button>
+                <button type="button" class="filter-chip" data-rating="7">7+</button>
+                <button type="button" class="filter-chip" data-rating="8">8+</button>
+            </div>
+
+            <div class="filters-bar" style="margin-bottom: 20px;">
+                <div class="search-box" style="max-width: none; flex: 1;">
+                    <span class="search-icon">&#128269;</span>
+                    <input type="text" placeholder="Поиск по названию..." id="catalog-search" autocomplete="off" style="padding: 14px 48px 14px 40px; font-size: 1rem;">
+                    <button type="button" class="voice-btn" title="Голосовой поиск" style="display: none;"></button>
+                </div>
+                <select id="sort-select" class="glass-card" style="padding: 12px 20px; border: 1px solid var(--color-border); border-radius: var(--radius-sm); color: var(--color-text); background: var(--color-surface); font-family: var(--font); font-size: 0.9rem; min-width: 180px;">
+                    <option value="rating">По рейтингу</option>
+                    <option value="year">По году</option>
+                    <option value="title">По названию</option>
+                </select>
+            </div>
+
+            <div class="movies-grid" id="movies-grid"></div>
+
+            <div style="text-align: center; margin: 32px 0;">
+                <button type="button" class="btn btn-secondary" id="load-more-btn" style="display: none;">Загрузить ещё</button>
+            </div>
+        </div>
+    </main>
+
+    <div class="voice-overlay">
+        <div class="voice-ring"><span class="mic-icon">&#127908;</span></div>
+        <div class="voice-text">Слушаю...</div>
+        <div class="voice-hint">Скажите, что ищете</div>
+    </div>
+
+    <footer class="footer">
+        <div class="footer-inner">
+            <div class="footer-col">
+                <h4>Навигация</h4>
+                <a href="catalog.html">Каталог</a>
+                <a href="schedule.html">Расписание</a>
+                <a href="catalog.html?exclusive=1">Эксклюзив</a>
+                <a href="promo.html">Акции</a>
+            </div>
+            <div class="footer-col">
+                <h4>Помощь</h4>
+                <a href="faq.html">FAQ</a>
+                <a href="contacts.html">Контакты</a>
+                <a href="terms.html">Условия</a>
+                <a href="privacy.html">Политика</a>
+            </div>
+            <div class="footer-col">
+                <h4>Компания</h4>
+                <a href="about.html">О нас</a>
+                <a href="careers.html">Карьера</a>
+                <a href="partners.html">Партнёрам</a>
+                <a href="press.html">Пресса</a>
+            </div>
+            <div class="footer-col">
+                <h4>Социальные сети</h4>
+                <a href="https://t.me" target="_blank" rel="noopener">Telegram</a>
+                <a href="https://vk.com" target="_blank" rel="noopener">VK</a>
+                <a href="https://youtube.com" target="_blank" rel="noopener">YouTube</a>
+                <a href="https://instagram.com" target="_blank" rel="noopener">Instagram</a>
+            </div>
+        </div>
+        <div class="footer-bottom">2026 КиноВселенная. Все права защищены.</div>
+    </footer>
+
+    <script src="js/api.js"></script>
+    <script src="js/ui-kit.js"></script>
+    <script src="js/animations.js"></script>
+    <script src="js/voice-assistant.js"></script>
+    <script>
+        (function() {
+            const grid = document.getElementById('movies-grid');
+            const loadMoreBtn = document.getElementById('load-more-btn');
+            const catalogSearch = document.getElementById('catalog-search');
+            const sortSelect = document.getElementById('sort-select');
+            const aiBanner = document.getElementById('ai-query-banner');
+            const aiQueryText = document.getElementById('ai-query-text');
+
+            let state = {
+                genreIds: [],
+                platforms: null,
+                ratingFrom: null,
+                search: '',
+                sortBy: 'rating',
+                page: 1,
+                totalCount: 0,
+                isLoading: false,
+                aiResults: null
+            };
+
+            function createSkeletonCard() {
+                const wrap = document.createElement('div');
+                wrap.className = 'movie-card';
+                wrap.innerHTML = `
+                    <div class="movie-poster-wrap">
+                        <div class="skeleton" style="width:100%;height:100%;min-height:250px;"></div>
+                    </div>
+                    <div class="skeleton" style="width:80%;height:14px;margin-top:8px;"></div>
+                    <div class="skeleton" style="width:60%;height:12px;margin-top:6px;"></div>
+                `;
+                return wrap;
+            }
+
+            function showSkeletons(count) {
+                grid.innerHTML = '';
+                for (let i = 0; i < count; i++) grid.appendChild(createSkeletonCard());
+            }
+
+            function buildMoviesUrl(resetPage) {
+                const p = resetPage ? 1 : state.page;
+                const params = new URLSearchParams();
+                if (state.genreIds.length) state.genreIds.forEach(id => params.append('genreIds', String(id)));
+                if (state.platforms) params.set('platforms', state.platforms);
+                if (state.ratingFrom != null) params.set('ratingFrom', state.ratingFrom);
+                if (state.search) params.set('search', state.search);
+                if (state.sortBy) params.set('sortBy', state.sortBy);
+                params.set('page', p);
+                params.set('pageSize', 20);
+                return '/movies?' + params.toString();
+            }
+
+            async function loadMovies(append) {
+                if (state.isLoading) return;
+                state.isLoading = true;
+
+                if (!append) showSkeletons(12);
+
+                try {
+                    if (state.aiResults && !append) {
+                        renderMovies(state.aiResults.results);
+                        state.totalCount = state.aiResults.results.length;
+                        loadMoreBtn.style.display = 'none';
+                    } else {
+                        const data = await api.get(buildMoviesUrl(!append));
+                        const movies = data.items || [];
+                        const total = data.totalCount || 0;
+                        state.totalCount = total;
+
+                        if (append) {
+                            movies.forEach(m => grid.appendChild(createMovieCard(m)));
+                        } else {
+                            renderMovies(movies);
+                        }
+
+                        const hasMore = (state.page * 20) < total;
+                        loadMoreBtn.style.display = hasMore ? 'inline-flex' : 'none';
+                    }
+                } catch (err) {
+                    if (!append) grid.innerHTML = '<p style="color:var(--color-text-secondary);grid-column:1/-1;">Не удалось загрузить фильмы</p>';
+                    showToast('Ошибка: ' + err.message, 'error');
+                }
+                state.isLoading = false;
+            }
+
+            function renderMovies(movies) {
+                grid.innerHTML = '';
+                movies.forEach(m => grid.appendChild(createMovieCard(m)));
+            }
+
+            function applyFilters() {
+                state.page = 1;
+                state.aiResults = null;
+                sessionStorage.removeItem('aiSearchResult');
+                aiBanner.style.display = 'none';
+                loadMovies(false);
+            }
+
+            function debounce(fn, ms) {
+                let t;
+                return (...args) => {
+                    clearTimeout(t);
+                    t = setTimeout(() => fn(...args), ms);
+                };
+            }
+
+            document.addEventListener('DOMContentLoaded', async () => {
+                const aiSearch = sessionStorage.getItem('aiSearchResult');
+                if (aiSearch) {
+                    try {
+                        const parsed = JSON.parse(aiSearch);
+                        state.aiResults = { results: parsed.results || [], interpretedQuery: parsed.interpretedQuery };
+                        aiQueryText.textContent = parsed.interpretedQuery || 'Результаты голосового поиска';
+                        aiBanner.style.display = 'block';
+                        sessionStorage.removeItem('aiSearchResult');
+                    } catch (_) {}
+                }
+
+                const searchParam = getQueryParam('search');
+                if (searchParam) {
+                    catalogSearch.value = searchParam;
+                    state.search = searchParam;
+                }
+
+                const genresBar = document.getElementById('genres-bar');
+                const platformsBar = document.getElementById('platforms-bar');
+
+                try {
+                    const [genresData, platformsData] = await Promise.all([
+                        api.get('/genres/with-ids').catch(() => api.get('/genres').then(names => names.map((name, i) => ({ id: i + 1, name })))),
+                        api.get('/filters/platforms').catch(() => [])
+                    ]);
+
+                    const genres = Array.isArray(genresData) && genresData[0] && typeof genresData[0] === 'object'
+                        ? genresData
+                        : (Array.isArray(genresData) ? genresData.map((name, i) => ({ id: i + 1, name })) : []);
+
+                    genres.forEach(g => {
+                        const chip = document.createElement('button');
+                        chip.type = 'button';
+                        chip.className = 'filter-chip';
+                        chip.textContent = g.name || g;
+                        chip.dataset.genreId = g.id;
+                        chip.addEventListener('click', () => {
+                            chip.classList.toggle('active');
+                            state.genreIds = Array.from(document.querySelectorAll('#genres-bar .filter-chip.active'))
+                                .map(c => parseInt(c.dataset.genreId, 10));
+                            applyFilters();
+                        });
+                        genresBar.appendChild(chip);
+                    });
+
+                    (platformsData || []).forEach(p => {
+                        const chip = document.createElement('button');
+                        chip.type = 'button';
+                        chip.className = 'filter-chip';
+                        chip.textContent = p;
+                        chip.dataset.platform = p;
+                        chip.addEventListener('click', () => {
+                            chip.classList.toggle('active');
+                            const active = Array.from(document.querySelectorAll('#platforms-bar .filter-chip.active'));
+                            state.platforms = active.length ? active.map(c => c.dataset.platform).join(',') : null;
+                            applyFilters();
+                        });
+                        platformsBar.appendChild(chip);
+                    });
+                } catch (_) {
+                    genresBar.innerHTML += '<span style="color:var(--color-text-muted);">Жанры недоступны</span>';
+                }
+
+                document.querySelectorAll('[data-rating]').forEach(btn => {
+                    btn.addEventListener('click', () => {
+                        document.querySelectorAll('[data-rating]').forEach(b => b.classList.remove('active'));
+                        if (state.ratingFrom === parseFloat(btn.dataset.rating)) {
+                            state.ratingFrom = null;
+                        } else {
+                            btn.classList.add('active');
+                            state.ratingFrom = parseFloat(btn.dataset.rating);
+                        }
+                        applyFilters();
+                    });
+                });
+
+                catalogSearch.addEventListener('input', debounce(() => {
+                    state.search = catalogSearch.value.trim();
+                    applyFilters();
+                }, 300));
+
+                sortSelect.addEventListener('change', () => {
+                    state.sortBy = sortSelect.value;
+                    applyFilters();
+                });
+
+                loadMoreBtn.addEventListener('click', () => {
+                    state.page++;
+                    loadMovies(true);
+                });
+
+                document.getElementById('header-search')?.addEventListener('keydown', e => {
+                    if (e.key === 'Enter') {
+                        const q = e.target.value.trim();
+                        window.location.href = q ? `catalog.html?search=${encodeURIComponent(q)}` : 'catalog.html';
+                    }
+                });
+
+                document.addEventListener('aiSearchResults', (e) => {
+                    const d = e.detail;
+                    if (d && d.results) {
+                        state.aiResults = { results: d.results, interpretedQuery: d.interpretedQuery };
+                        aiQueryText.textContent = d.interpretedQuery || 'Результаты поиска';
+                        aiBanner.style.display = 'block';
+                        loadMovies(false);
+                    }
+                });
+
+                loadMovies(false);
+            });
+        })();
+    </script>
+</body>
+</html>

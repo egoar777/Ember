@@ -9,6 +9,7 @@ public class Comment
     public string Text { get; set; } = string.Empty;
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime? UpdatedAt { get; set; }
+    public bool IsHidden { get; set; }
 
     public Movie Movie { get; set; } = null!;
     public User User { get; set; } = null!;

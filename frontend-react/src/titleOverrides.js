@@ -23,4 +23,3 @@ export function getDisplayTitleForString(titleString) {
   const found = TITLE_OVERRIDES.find((item) => title.includes(item.match));
   return found ? found.title : titleString;
 }
-

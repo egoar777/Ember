@@ -11,4 +11,3 @@ export function getHeroObjectPosition(movie) {
   const found = HERO_POSITION_OVERRIDES.find((item) => title.includes(item.match));
   return found?.objectPosition;
 }
-

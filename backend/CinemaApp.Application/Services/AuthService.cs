@@ -2,6 +2,7 @@ using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Text;
+using CinemaApp.Application.Common;
 using CinemaApp.Application.DTOs;
 using CinemaApp.Application.Interfaces;
 using CinemaApp.Data;
@@ -15,25 +16,29 @@ namespace CinemaApp.Application.Services;
 
 public class AuthService : IAuthService
 {
+    private const string GoogleOnlyPasswordMarker = "GOOGLE_OAUTH";
+
     private readonly CinemaDbContext _db;
     private readonly IConfiguration _config;
+    private readonly IGoogleAuthService _googleAuth;
 
-    public AuthService(CinemaDbContext db, IConfiguration config)
+    public AuthService(CinemaDbContext db, IConfiguration config, IGoogleAuthService googleAuth)
     {
         _db = db;
         _config = config;
+        _googleAuth = googleAuth;
     }
 
     public async Task<AuthResponse> RegisterAsync(RegisterRequest request)
     {
-        var exists = await _db.Users.AnyAsync(u => u.Email == request.Email);
+        var exists = await _db.Users.AnyAsync(u => u.Email == request.Email.Trim().ToLowerInvariant());
         if (exists)
-            throw new InvalidOperationException("Email is already registered.");
+            throw new InvalidOperationException("Этот email уже зарегистрирован.");
 
         var user = new User
         {
-            Email = request.Email,
-            PasswordHash = HashPassword(request.Password),
+            Email = request.Email.Trim().ToLowerInvariant(),
+            PasswordHash = PasswordHashing.Hash(request.Password),
             DisplayName = request.DisplayName,
             Role = UserRole.User
         };
@@ -51,13 +56,65 @@ public class AuthService : IAuthService
 
     public async Task<AuthResponse> LoginAsync(LoginRequest request)
     {
-        var user = await _db.Users.FirstOrDefaultAsync(u => u.Email == request.Email);
+        var user = await _db.Users.FirstOrDefaultAsync(u => u.Email == request.Email.Trim().ToLowerInvariant());
         if (user == null)
-            throw new UnauthorizedAccessException("Invalid email or password.");
+            throw ApiException.Unauthorized(ErrorCodes.InvalidCredentials);
 
-        var hash = HashPassword(request.Password);
-        if (user.PasswordHash != hash)
-            throw new UnauthorizedAccessException("Invalid email or password.");
+        if (user.PasswordHash == GoogleOnlyPasswordMarker)
+            throw ApiException.Unauthorized(ErrorCodes.UseGoogleLogin);
+
+        if (!PasswordHashing.Verify(request.Password, user.PasswordHash))
+            throw ApiException.Unauthorized(ErrorCodes.InvalidCredentials);
+
+        if (!user.PasswordHash.StartsWith("pbkdf2$", StringComparison.Ordinal))
+            user.PasswordHash = PasswordHashing.Hash(request.Password);
+
+        var refreshToken = GenerateRefreshToken();
+        user.RefreshToken = refreshToken;
+        user.RefreshTokenExpiry = DateTime.UtcNow.AddDays(7);
+        await _db.SaveChangesAsync();
+
+        var jwt = GenerateJwtToken(user);
+        return new AuthResponse(jwt, refreshToken, MapToProfile(user));
+    }
+
+    public async Task<AuthResponse> LoginWithGoogleAsync(GoogleLoginRequest request)
+    {
+        var googleUser = await _googleAuth.ExchangeAuthorizationCodeAsync(request.Code, request.RedirectUri);
+
+        var user = await _db.Users.FirstOrDefaultAsync(u => u.GoogleSubjectId == googleUser.SubjectId);
+        if (user == null)
+        {
+            user = await _db.Users.FirstOrDefaultAsync(u => u.Email == googleUser.Email);
+            if (user != null)
+            {
+                if (!string.IsNullOrEmpty(user.GoogleSubjectId) && user.GoogleSubjectId != googleUser.SubjectId)
+                    throw ApiException.Unauthorized(ErrorCodes.GoogleAuthFailed);
+
+                user.GoogleSubjectId = googleUser.SubjectId;
+                if (string.IsNullOrWhiteSpace(user.AvatarUrl) && !string.IsNullOrWhiteSpace(googleUser.AvatarUrl))
+                    user.AvatarUrl = googleUser.AvatarUrl;
+                if (string.IsNullOrWhiteSpace(user.DisplayName))
+                    user.DisplayName = googleUser.DisplayName;
+            }
+            else
+            {
+                user = new User
+                {
+                    Email = googleUser.Email,
+                    DisplayName = googleUser.DisplayName,
+                    AvatarUrl = googleUser.AvatarUrl,
+                    GoogleSubjectId = googleUser.SubjectId,
+                    PasswordHash = GoogleOnlyPasswordMarker,
+                    Role = UserRole.User,
+                };
+                _db.Users.Add(user);
+            }
+        }
+        else if (string.IsNullOrWhiteSpace(user.AvatarUrl) && !string.IsNullOrWhiteSpace(googleUser.AvatarUrl))
+        {
+            user.AvatarUrl = googleUser.AvatarUrl;
+        }
 
         var refreshToken = GenerateRefreshToken();
         user.RefreshToken = refreshToken;
@@ -73,7 +130,7 @@ public class AuthService : IAuthService
         var user = await _db.Users.FirstOrDefaultAsync(u =>
             u.RefreshToken == refreshToken && u.RefreshTokenExpiry > DateTime.UtcNow);
         if (user == null)
-            throw new UnauthorizedAccessException("Invalid or expired refresh token.");
+            throw ApiException.Unauthorized(ErrorCodes.InvalidRefreshToken);
 
         var newRefreshToken = GenerateRefreshToken();
         user.RefreshToken = newRefreshToken;
@@ -93,13 +150,6 @@ public class AuthService : IAuthService
         user.RefreshToken = null;
         user.RefreshTokenExpiry = null;
         await _db.SaveChangesAsync();
-    }
-
-    private static string HashPassword(string password)
-    {
-        var bytes = Encoding.UTF8.GetBytes(password);
-        var hash = SHA256.HashData(bytes);
-        return Convert.ToBase64String(hash);
     }
 
     private string GenerateJwtToken(User user)
@@ -145,6 +195,13 @@ public class AuthService : IAuthService
             user.Role.ToString(),
             user.AvatarUrl,
             user.Preferences,
-            user.NotificationSettings);
+            user.NotificationSettings,
+            user.BonusBalance,
+            user.TotalSpent,
+            user.TicketsPurchased,
+            LoyaltyProgram.GetLevel(user.TotalSpent, user.TicketsPurchased),
+            LoyaltyProgram.GetTicketDiscountPercent(user.TotalSpent, user.TicketsPurchased),
+            LoyaltyProgram.GetBonusEarnMultiplier(user.TotalSpent, user.TicketsPurchased),
+            LoyaltyProgram.GetLoyaltySummary(user.TotalSpent, user.TicketsPurchased));
     }
 }

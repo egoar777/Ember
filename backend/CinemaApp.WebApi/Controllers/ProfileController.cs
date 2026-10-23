@@ -1,7 +1,7 @@
-using System.IdentityModel.Tokens.Jwt;
-using System.Security.Claims;
-using System.Linq;
+using CinemaApp.WebApi.Extensions;
+using CinemaApp.Application.Common;
 using CinemaApp.Application.DTOs;
+using CinemaApp.Application.Services;
 using CinemaApp.Data;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -17,35 +17,7 @@ public class ProfileController : ControllerBase
     private readonly CinemaDbContext _db;
     public ProfileController(CinemaDbContext db) => _db = db;
 
-    private int UserId
-    {
-        get
-        {
-            var claim = User.FindFirst("sub")?.Value
-                        ?? User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-            if (!string.IsNullOrEmpty(claim))
-                return int.Parse(claim);
-
-            var auth = Request.Headers["Authorization"].FirstOrDefault();
-            if (!string.IsNullOrEmpty(auth) && auth.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
-            {
-                var token = auth.Substring("Bearer ".Length).Trim();
-                try
-                {
-                    var handler = new JwtSecurityTokenHandler();
-                    var jwt = handler.ReadJwtToken(token);
-                    var sub = jwt.Claims.FirstOrDefault(c => c.Type == "sub" || c.Type == ClaimTypes.NameIdentifier)?.Value;
-                    if (!string.IsNullOrEmpty(sub))
-                        return int.Parse(sub);
-                }
-                catch
-                {
-                }
-            }
-
-            throw new UnauthorizedAccessException("User id claim is missing.");
-        }
-    }
+    private int UserId => User.GetRequiredUserId();
 
     [HttpGet]
     public async Task<ActionResult<UserProfileDto>> GetProfile()
@@ -53,7 +25,12 @@ public class ProfileController : ControllerBase
         var user = await _db.Users.FindAsync(UserId);
         if (user == null) return NotFound();
         return Ok(new UserProfileDto(user.Id, user.Email, user.DisplayName, user.Role.ToString(),
-            user.AvatarUrl, user.Preferences, user.NotificationSettings));
+            user.AvatarUrl, user.Preferences, user.NotificationSettings,
+            user.BonusBalance, user.TotalSpent, user.TicketsPurchased,
+            LoyaltyProgram.GetLevel(user.TotalSpent, user.TicketsPurchased),
+            LoyaltyProgram.GetTicketDiscountPercent(user.TotalSpent, user.TicketsPurchased),
+            LoyaltyProgram.GetBonusEarnMultiplier(user.TotalSpent, user.TicketsPurchased),
+            LoyaltyProgram.GetLoyaltySummary(user.TotalSpent, user.TicketsPurchased)));
     }
 
     [HttpPut]
@@ -67,7 +44,12 @@ public class ProfileController : ControllerBase
         if (req.NotificationSettings != null) user.NotificationSettings = req.NotificationSettings;
         await _db.SaveChangesAsync();
         return Ok(new UserProfileDto(user.Id, user.Email, user.DisplayName, user.Role.ToString(),
-            user.AvatarUrl, user.Preferences, user.NotificationSettings));
+            user.AvatarUrl, user.Preferences, user.NotificationSettings,
+            user.BonusBalance, user.TotalSpent, user.TicketsPurchased,
+            LoyaltyProgram.GetLevel(user.TotalSpent, user.TicketsPurchased),
+            LoyaltyProgram.GetTicketDiscountPercent(user.TotalSpent, user.TicketsPurchased),
+            LoyaltyProgram.GetBonusEarnMultiplier(user.TotalSpent, user.TicketsPurchased),
+            LoyaltyProgram.GetLoyaltySummary(user.TotalSpent, user.TicketsPurchased)));
     }
 
     [HttpGet("history")]

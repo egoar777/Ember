@@ -3,7 +3,7 @@ namespace CinemaApp.Application.DTOs;
 public record MovieListDto(
     int Id, string Title, string? OriginalTitle, int Year, int Duration,
     string? AgeRating, double AverageRating, int RatingCount,
-    string? PosterUrl, string? Platforms, bool IsExclusive,
+    string? PosterUrl, string? BackgroundUrl, string? TrailerUrl, string? Platforms, bool IsExclusive,
     List<string> Genres);
 
 public record MovieDetailDto(
@@ -16,7 +16,9 @@ public record MovieDetailDto(
 public record MovieFilterRequest(
     int[]? GenreIds, int? YearFrom, int? YearTo, double? RatingFrom,
     string? Platforms, string? Search, string? SortBy, bool? Exclusive, bool? IsPremiere,
-    int Page = 1, int PageSize = 20);
+    int Page = 1, int PageSize = 20,
+    bool? ForKids = null, bool? Featured = null,
+    string? ScreeningLanguage = null);
 
 public record PagedResult<T>(List<T> Items, int TotalCount, int Page, int PageSize);
 

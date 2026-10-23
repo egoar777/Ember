@@ -24,6 +24,7 @@ public class CinemaDbContext : DbContext
     public DbSet<Review> Reviews => Set<Review>();
     public DbSet<Comment> Comments => Set<Comment>();
     public DbSet<Notification> Notifications => Set<Notification>();
+    public DbSet<NewsItem> NewsItems => Set<NewsItem>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -32,8 +33,10 @@ public class CinemaDbContext : DbContext
         modelBuilder.Entity<User>(e =>
         {
             e.HasIndex(u => u.Email).IsUnique();
+            e.HasIndex(u => u.GoogleSubjectId).IsUnique();
             e.Property(u => u.Email).HasMaxLength(256);
             e.Property(u => u.DisplayName).HasMaxLength(100);
+            e.Property(u => u.TotalSpent).HasPrecision(10, 2);
         });
 
         modelBuilder.Entity<Movie>(e =>
@@ -43,6 +46,7 @@ public class CinemaDbContext : DbContext
                 .UsingEntity("MovieGenres");
             e.HasIndex(m => m.Year);
             e.HasIndex(m => m.AverageRating);
+            e.HasIndex(m => m.ExternalMooonEventId).IsUnique();
             e.Property(m => m.Title).HasMaxLength(500);
         });
 
@@ -139,6 +143,14 @@ public class CinemaDbContext : DbContext
         {
             e.HasOne(n => n.User).WithMany(u => u.Notifications).HasForeignKey(n => n.UserId);
             e.HasIndex(n => new { n.UserId, n.IsRead });
+        });
+
+        modelBuilder.Entity<NewsItem>(e =>
+        {
+            e.Property(n => n.Title).HasMaxLength(300);
+            e.Property(n => n.Type).HasMaxLength(20);
+            e.Property(n => n.Badge).HasMaxLength(100);
+            e.HasIndex(n => n.CreatedAt);
         });
     }
 }

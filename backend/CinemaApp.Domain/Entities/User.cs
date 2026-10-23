@@ -7,11 +7,16 @@ public class User
     public int Id { get; set; }
     public string Email { get; set; } = string.Empty;
     public string PasswordHash { get; set; } = string.Empty;
+    /// <summary>Идентификатор учётной записи Google (sub из OpenID).</summary>
+    public string? GoogleSubjectId { get; set; }
     public string DisplayName { get; set; } = string.Empty;
     public UserRole Role { get; set; } = UserRole.User;
     public string? AvatarUrl { get; set; }
     public string? Preferences { get; set; }
     public string? NotificationSettings { get; set; }
+    public int BonusBalance { get; set; }
+    public decimal TotalSpent { get; set; }
+    public int TicketsPurchased { get; set; }
     public string? RefreshToken { get; set; }
     public DateTime? RefreshTokenExpiry { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;

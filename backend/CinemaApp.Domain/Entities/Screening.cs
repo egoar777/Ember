@@ -12,6 +12,8 @@ public class Screening
     public decimal BasePrice { get; set; }
     public bool IsPremiere { get; set; }
     public bool IsExclusive { get; set; }
+    public bool IsCancelled { get; set; }
+    public DateTime? CancelledAt { get; set; }
 
     public Movie Movie { get; set; } = null!;
     public Hall Hall { get; set; } = null!;

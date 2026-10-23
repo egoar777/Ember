@@ -9,4 +9,3 @@ export function getGenresOverride(movie) {
   const found = GENRE_OVERRIDES.find((item) => title.includes(item.match));
   return found ? found.genres : null;
 }
-

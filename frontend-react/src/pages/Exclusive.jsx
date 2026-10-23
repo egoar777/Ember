@@ -1,51 +1,128 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
+import { Link } from 'react-router-dom';
 import { apiGet } from '../api/client';
-import { useAuth } from '../context/AuthContext';
+import { useAuth } from '../context/useAuth';
+import { useI18n } from '../context/useI18n';
+import { dictForLocale } from '../i18n/translations';
 import MovieCard from '../components/MovieCard';
+import LoadingState from '../components/LoadingState';
+import { dedupeMovies } from '../utils/dedupeMovies';
 
 export default function Exclusive() {
   const { onAuthChange } = useAuth();
+  const { locale } = useI18n();
   const [movies, setMovies] = useState([]);
   const [loading, setLoading] = useState(true);
 
+  const ex = useMemo(() => dictForLocale(locale).exclusive || {}, [locale]);
+  const specialEvents = ex.events || [];
+
   useEffect(() => {
     apiGet('/movies?platforms=IMAX&pageSize=20', onAuthChange)
-      .then((r) => setMovies(r?.items || []))
+      .then((r) => setMovies(dedupeMovies(r?.items || [])))
       .catch(() => setMovies([]))
       .finally(() => setLoading(false));
   }, [onAuthChange]);
 
   return (
-    <div className="container">
-      <div className="hero" style={{ height: 280, marginBottom: 40 }}>
-        <div className="hero-overlay" style={{ background: 'linear-gradient(to top, var(--color-bg), transparent 60%)' }} />
-        <div className="hero-content">
-          <h1 className="hero-title">Эксклюзивный контент</h1>
-          <p className="hero-description">Премьерные показы и особые мероприятия</p>
+    <div className="container exclusive-page">
+      <section className="exclusive-hero">
+        <div className="exclusive-hero-glow exclusive-hero-glow-left" aria-hidden="true" />
+        <div className="exclusive-hero-glow exclusive-hero-glow-right" aria-hidden="true" />
+        <div className="exclusive-hero-wordmark" aria-hidden="true">
+          ember<span>.</span>
         </div>
-      </div>
-      <h2 className="section-title" style={{ marginBottom: 20 }}>Премьерные показы</h2>
-      {loading ? (
-        <div className="movies-grid">
-          {[1, 2, 3, 4, 5, 6].map((i) => <div key={i} className="skeleton" style={{ height: 320 }} />)}
-        </div>
-      ) : (
-        <div className="movies-grid">
-          {movies.map((m) => <MovieCard key={m.id} movie={m} />)}
-        </div>
-      )}
-      <div className="section" style={{ marginTop: 48 }}>
-        <h2 className="section-title">Особые мероприятия</h2>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 20 }}>
-          {['Ночные премьеры', 'Ретро-показы', 'Киноклуб', 'Детские марафоны'].map((title, i) => (
-            <div key={i} className="glass-card" style={{ padding: 24 }}>
-              <h3 style={{ marginBottom: 8 }}>{title}</h3>
-              <p style={{ color: 'var(--color-text-secondary)', fontSize: '0.9rem' }}>Уникальные сеансы и события в кинотеатрах.</p>
-              <a href="#events" className="btn btn-secondary btn-sm" style={{ marginTop: 12 }}>Подробнее</a>
+        <div className="exclusive-hero-grid">
+          <div className="exclusive-hero-copy">
+            <span className="exclusive-hero-badge">{ex.heroBadge}</span>
+            <h1 className="exclusive-hero-title">{ex.heroTitle}</h1>
+            <p className="exclusive-hero-description">{ex.heroLead}</p>
+            <div className="exclusive-hero-actions">
+              <a href="#exclusive-premieres" className="btn btn-primary btn-lg">
+                {ex.btnPremieres}
+              </a>
+              <a href="#exclusive-events" className="btn btn-secondary btn-lg">
+                {ex.btnEvents}
+              </a>
             </div>
+          </div>
+          <div className="exclusive-hero-panel">
+            <div className="exclusive-hero-panel-label">{ex.formatsLabel}</div>
+            <div className="exclusive-hero-stats">
+              <div className="exclusive-hero-stat">
+                <strong>{ex.stat1h}</strong>
+                <span>{ex.stat1t}</span>
+              </div>
+              <div className="exclusive-hero-stat">
+                <strong>{ex.stat2h}</strong>
+                <span>{ex.stat2t}</span>
+              </div>
+              <div className="exclusive-hero-stat">
+                <strong>{ex.stat3h}</strong>
+                <span>{ex.stat3t}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="exclusive-premieres" className="exclusive-section-shell">
+        <div className="exclusive-section-head">
+          <div>
+            <span className="exclusive-section-kicker">{ex.secPremKicker}</span>
+            <h2 className="section-title exclusive-section-title">{ex.secPremTitle}</h2>
+          </div>
+          <Link to="/catalog" className="btn btn-secondary btn-sm">
+            {ex.fullAfisha}
+          </Link>
+        </div>
+        {loading ? (
+          <LoadingState />
+        ) : (
+          <div className="movies-grid exclusive-movies-grid">
+            {movies.map((m) => (
+              <MovieCard key={m.id} movie={m} />
+            ))}
+          </div>
+        )}
+      </section>
+
+      <section id="exclusive-events" className="exclusive-section-shell">
+        <div className="exclusive-section-head">
+          <div>
+            <span className="exclusive-section-kicker">{ex.secEvKicker}</span>
+            <h2 className="section-title exclusive-section-title">{ex.secEvTitle}</h2>
+          </div>
+          <Link to="/news" className="btn btn-secondary btn-sm">
+            {ex.newsLink}
+          </Link>
+        </div>
+        <div className="exclusive-events-grid">
+          {specialEvents.map((event) => (
+            <article key={event.key || event.title} className="exclusive-event-card">
+              <span className="exclusive-event-label">{event.label}</span>
+              <h3>{event.title}</h3>
+              <p>{event.description}</p>
+              <div className="exclusive-event-footer">
+                <span>{event.meta}</span>
+                <Link to="/catalog" className="btn btn-secondary btn-sm exclusive-event-button">
+                  {ex.toAfisha}
+                </Link>
+              </div>
+            </article>
           ))}
         </div>
-      </div>
+      </section>
+      <section className="exclusive-cta-strip">
+        <div className="exclusive-cta-copy">
+          <span className="exclusive-section-kicker">{ex.ctaKicker}</span>
+          <h2>{ex.ctaTitle}</h2>
+          <p>{ex.ctaText}</p>
+        </div>
+        <Link to="/catalog" className="btn btn-primary btn-lg exclusive-cta-button">
+          {ex.ctaBtn}
+        </Link>
+      </section>
     </div>
   );
 }

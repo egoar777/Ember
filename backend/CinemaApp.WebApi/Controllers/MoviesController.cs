@@ -17,9 +17,12 @@ public class MoviesController : ControllerBase
     public async Task<ActionResult<PagedResult<MovieListDto>>> GetMovies(
         [FromQuery] int[]? genreIds, [FromQuery] int? yearFrom, [FromQuery] int? yearTo,
         [FromQuery] double? ratingFrom, [FromQuery] string? platforms, [FromQuery] string? search,
-        [FromQuery] string? sortBy, [FromQuery] bool? exclusive, [FromQuery] bool? isPremiere, [FromQuery] int page = 1, [FromQuery] int pageSize = 20)
+        [FromQuery] string? sortBy, [FromQuery] bool? exclusive, [FromQuery] bool? isPremiere,
+        [FromQuery] int page = 1, [FromQuery] int pageSize = 20,
+        [FromQuery] bool? forKids = null, [FromQuery] bool? featured = null,
+        [FromQuery] string? screeningLanguage = null)
     {
-        var filter = new MovieFilterRequest(genreIds, yearFrom, yearTo, ratingFrom, platforms, search, sortBy, exclusive, isPremiere, page, pageSize);
+        var filter = new MovieFilterRequest(genreIds, yearFrom, yearTo, ratingFrom, platforms, search, sortBy, exclusive, isPremiere, page, pageSize, forKids, featured, screeningLanguage);
         return Ok(await _movieService.GetMoviesAsync(filter));
     }
 

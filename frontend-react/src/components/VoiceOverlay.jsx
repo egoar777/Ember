@@ -1,8 +1,10 @@
-import { useVoice } from '../context/VoiceContext';
+import { useVoice } from '../context/useVoice';
+import { useI18n } from '../context/useI18n';
 import { IconMic } from './Icons';
 
 export default function VoiceOverlay() {
   const { isListening, transcript, stopListening } = useVoice();
+  const { t } = useI18n();
   if (!isListening) return null;
   return (
     <div className="voice-overlay active" onClick={stopListening} role="presentation">
@@ -12,7 +14,7 @@ export default function VoiceOverlay() {
         </span>
       </div>
       <div className="voice-text">{transcript}</div>
-      <div className="voice-hint">Скажите название фильма или жанр</div>
+      <div className="voice-hint">{t('voice.hint')}</div>
     </div>
   );
 }

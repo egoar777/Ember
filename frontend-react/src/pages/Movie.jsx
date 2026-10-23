@@ -1,30 +1,84 @@
-import { useState, useEffect, useRef } from 'react';
-import { useParams, Link } from 'react-router-dom';
-import { apiGet, apiPost } from '../api/client';
-import { useAuth } from '../context/AuthContext';
-import { useToast } from '../context/ToastContext';
+import { useState, useEffect, useMemo } from 'react';
+import { useParams, Link, useSearchParams } from 'react-router-dom';
+import { apiGet, apiPost, apiDel } from '../api/client';
+import { useAuth } from '../context/useAuth';
+import { useToast } from '../context/useToast';
+import { useI18n } from '../context/useI18n';
 import MovieCard from '../components/MovieCard';
-import { getPosterOverride } from '../posterOverrides';
-import { getHeroOverride } from '../heroOverrides';
+import MovieBackdrop from '../components/MovieBackdrop';
+import MoviePoster from '../components/MoviePoster';
+import ModalCornerClose from '../components/ModalCornerClose';
+import LoadingState from '../components/LoadingState';
 import { getTitleOverride } from '../titleOverrides';
-import { getHeroObjectPosition } from '../heroPositionOverrides';
 import { getMovieOverride } from '../movieOverrides';
 import { formatDurationMinutes } from '../utils/formatDuration';
+import { screeningMatchesAudioFilter } from '../utils/screeningAudioFilter';
+import { dateLocaleForUi } from '../i18n/localeUi';
+import CurrencySymbol from '../components/CurrencySymbol';
+import { getAudioFilterOptions } from '../utils/audioFilterOptions';
+import RolloutSelect from '../components/ui/RolloutSelect';
+import TrailerModal from '../components/TrailerModal';
+import ScreeningChip from '../components/ScreeningChip';
+import { dayMinPrice } from '../utils/screeningUi';
+import { resolveApiErrorFromException } from '../utils/resolveApiError';
+import { isAdminUser } from '../utils/isAdmin';
 
 export default function Movie() {
   const { id } = useParams();
+  return <MovieDetails key={id} id={id} />;
+}
+
+function MovieDetails({ id }) {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const audioKey = (searchParams.get('audio') || '').trim();
   const { user, isAuthenticated, onAuthChange } = useAuth();
   const { show: showToast } = useToast();
+  const { t, locale: uiLocale } = useI18n();
+  const dateLocale = dateLocaleForUi(uiLocale);
+
   const [movie, setMovie] = useState(null);
   const [screenings, setScreenings] = useState([]);
   const [reviews, setReviews] = useState([]);
   const [comments, setComments] = useState([]);
   const [similar, setSimilar] = useState([]);
-  const [tab, setTab] = useState('screenings');
   const [reviewText, setReviewText] = useState('');
-  const [commentText, setCommentText] = useState('');
-  const tabsBarRef = useRef(null);
-  const [tabIndicatorStyle, setTabIndicatorStyle] = useState({ left: 0, width: 0 });
+  const [trailerOpen, setTrailerOpen] = useState(false);
+  const [showtimesRequested, setShowtimesOpen] = useState(false);
+  const showtimesOpen = showtimesRequested || searchParams.get('showtimes') === '1';
+
+  const filteredScreenings = useMemo(
+    () => screenings.filter((s) => screeningMatchesAudioFilter(s.language, audioKey)),
+    [screenings, audioKey]
+  );
+
+  const discussionFeed = useMemo(() => {
+    const items = [
+      ...reviews.map((r) => ({ type: 'review', key: `review-${r.id}`, ...r })),
+      ...comments.map((c) => ({ type: 'comment', key: `comment-${c.id}`, ...c })),
+    ];
+    return items.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+  }, [reviews, comments]);
+
+  const closeShowtimes = () => {
+    setShowtimesOpen(false);
+    if (searchParams.get('showtimes')) {
+      const next = new URLSearchParams(searchParams);
+      next.delete('showtimes');
+      setSearchParams(next, { replace: true });
+    }
+  };
+
+  useEffect(() => {
+    if (!showtimesOpen) return undefined;
+    const prevBody = document.body.style.overflow;
+    const prevHtml = document.documentElement.style.overflow;
+    document.body.style.overflow = 'hidden';
+    document.documentElement.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = prevBody;
+      document.documentElement.style.overflow = prevHtml;
+    };
+  }, [showtimesOpen]);
 
   useEffect(() => {
     if (!id) return;
@@ -35,71 +89,80 @@ export default function Movie() {
     apiGet(`/movies/${id}/similar`, onAuthChange).then(setSimilar).catch(() => setSimilar([]));
   }, [id, onAuthChange]);
 
-  useEffect(() => {
-    const update = () => {
-      if (!tabsBarRef.current) return;
-      const el = tabsBarRef.current.querySelector(`.tab[data-tab="${tab}"]`);
-      if (!el) return;
-      const parentRect = tabsBarRef.current.getBoundingClientRect();
-      const rect = el.getBoundingClientRect();
-      setTabIndicatorStyle({ left: rect.left - parentRect.left, width: rect.width });
-    };
-    update();
-    const id = requestAnimationFrame(() => {
-      requestAnimationFrame(update);
-    });
-    return () => cancelAnimationFrame(id);
-  }, [tab]);
+  const onAudioFilterChange = (v) => {
+    const next = new URLSearchParams(searchParams);
+    if (v) next.set('audio', v);
+    else next.delete('audio');
+    setSearchParams(next, { replace: true });
+  };
+
+  const audioOptions = useMemo(() => getAudioFilterOptions(t), [t]);
 
   const handleAddToWatchlist = () => {
     if (!isAuthenticated) {
-      showToast('Войдите, чтобы добавить в список', 'error');
+      showToast(t('movie.loginWatchlist'), 'error');
       return;
     }
-    apiGet('/lists', onAuthChange).then((lists) => {
-      let wantList = lists?.find((l) => l.type === 'WantToWatch');
-      if (!wantList) {
-        return apiPost('/lists', { name: 'Хочу посмотреть', type: 'WantToWatch' }, onAuthChange).then((newList) => {
-          return apiPost(`/lists/${newList.id}/items`, { movieId: parseInt(id, 10) }, onAuthChange);
-        });
-      }
-      return apiPost(`/lists/${wantList.id}/items`, { movieId: parseInt(id, 10) }, onAuthChange);
-    }).then(() => showToast('Добавлено в «Хочу посмотреть»', 'success')).catch((e) => showToast(e.message, 'error'));
+    apiGet('/lists', onAuthChange)
+      .then((lists) => {
+        let wantList = lists?.find((l) => l.type === 'WantToWatch');
+        if (!wantList) {
+          return apiPost('/lists', { name: t('listDefaultName'), type: 'WantToWatch' }, onAuthChange).then((newList) => {
+            return apiPost(`/lists/${newList.id}/items`, { movieId: parseInt(id, 10) }, onAuthChange);
+          });
+        }
+        return apiPost(`/lists/${wantList.id}/items`, { movieId: parseInt(id, 10) }, onAuthChange);
+      })
+      .then(() => showToast(t('movie.addedWatchlist'), 'success'))
+      .catch((e) => showToast(resolveApiErrorFromException(e, t), 'error'));
   };
 
   const handleSubmitReview = (e) => {
     e.preventDefault();
     if (!reviewText.trim() || !isAuthenticated) return;
-    apiPost(`/movies/${id}/reviews`, { text: reviewText }, onAuthChange).then(() => {
-      setReviewText('');
-      apiGet(`/movies/${id}/reviews`, onAuthChange).then(setReviews);
-      showToast('Отзыв добавлен', 'success');
-    }).catch((e) => showToast(e.message, 'error'));
+    apiPost(`/movies/${id}/reviews`, { text: reviewText }, onAuthChange)
+      .then(() => {
+        setReviewText('');
+        apiGet(`/movies/${id}/reviews`, onAuthChange).then(setReviews);
+        showToast(t('movie.reviewAdded'), 'success');
+      })
+      .catch((e) => showToast(resolveApiErrorFromException(e, t), 'error'));
   };
 
-  const handleSubmitComment = (e) => {
-    e.preventDefault();
-    if (!commentText.trim() || !isAuthenticated) return;
-    apiPost(`/movies/${id}/comments`, { text: commentText }, onAuthChange).then(() => {
-      setCommentText('');
-      apiGet(`/movies/${id}/comments`, onAuthChange).then(setComments);
-      showToast('Комментарий добавлен', 'success');
-    }).catch((e) => showToast(e.message, 'error'));
-  };
-
-  if (!movie) return <div className="container"><p>Загрузка...</p></div>;
+  if (!movie) {
+    return <LoadingState label={t('movie.loading')} fullScreen />;
+  }
 
   const displayTitle = getTitleOverride(movie) || movie.title;
   const movieOverride = getMovieOverride(movie);
+  const trailerUrl = movie.trailerUrl || movie.TrailerUrl;
+  const isAdmin = isAdminUser(user);
 
-  const screeningsByDate = screenings.reduce((acc, s) => {
+  const reloadDiscussion = () => {
+    apiGet(`/movies/${id}/reviews`, onAuthChange).then(setReviews).catch(() => setReviews([]));
+    apiGet(`/movies/${id}/comments`, onAuthChange).then(setComments).catch(() => setComments([]));
+  };
+
+  const handleModerateDelete = async (item) => {
+    if (!window.confirm(t('admin.discussionDeleteConfirm'))) return;
+    const path = item.type === 'review' ? `/admin/reviews/${item.id}` : `/admin/comments/${item.id}`;
+    try {
+      await apiDel(path, onAuthChange);
+      showToast(t('admin.discussionDeleted'), 'success');
+      reloadDiscussion();
+    } catch (e) {
+      showToast(resolveApiErrorFromException(e, t), 'error');
+    }
+  };
+
+  const screeningsByDate = filteredScreenings.reduce((acc, s) => {
     const dateObj = new Date(s.startTime);
-    const dateKey = dateObj.toLocaleDateString('ru-RU', {
+    const dateKey = dateObj.toLocaleDateString(dateLocale, {
       day: '2-digit',
       month: '2-digit',
       year: 'numeric',
     });
-    const timeStr = dateObj.toLocaleTimeString('ru-RU', {
+    const timeStr = dateObj.toLocaleTimeString(dateLocale, {
       hour: '2-digit',
       minute: '2-digit',
     });
@@ -110,14 +173,9 @@ export default function Movie() {
   }, {});
 
   return (
-    <div className="container">
+    <>
       <div className="hero movie-detail-hero">
-        <img
-          className="hero-bg"
-          src={getHeroOverride(movie) || movie.backgroundUrl || getPosterOverride(movie) || 'https://picsum.photos/seed/bg/1920/1080'}
-          style={getHeroObjectPosition(movie) ? { objectPosition: getHeroObjectPosition(movie) } : undefined}
-          alt=""
-        />
+        <MovieBackdrop movie={movie} />
         <div className="hero-overlay" />
         <div className="movie-detail-hero-content">
           <div className="movie-detail-info">
@@ -131,135 +189,216 @@ export default function Movie() {
             </div>
             {(movieOverride?.director ?? movie.director) && (movieOverride?.director ?? movie.director) !== '—' && (
               <p className="movie-detail-meta-line">
-                <strong>Режиссёр:</strong> {movieOverride?.director ?? movie.director}
+                <strong>{t('movie.director')}</strong> {movieOverride?.director ?? movie.director}
               </p>
             )}
             {((movieOverride?.cast?.length && movieOverride.cast.join(', ')) || (movie.cast && movie.cast !== '—')) && (
               <p className="movie-detail-meta-line movie-detail-cast">
-                <strong>В ролях:</strong> {movieOverride?.cast?.length ? movieOverride.cast.join(', ') : movie.cast}
+                <strong>{t('movie.cast')}</strong>{' '}
+                {movieOverride?.cast?.length ? movieOverride.cast.join(', ') : movie.cast}
               </p>
             )}
             <p className="movie-detail-description">{movieOverride?.description ?? movie.description}</p>
           </div>
           <div className="movie-detail-hero-footer">
             <div className="hero-actions">
-              <Link to={`/booking?movieId=${id}`} className="btn btn-primary">Купить билет</Link>
-              <button type="button" className="btn btn-secondary" onClick={handleAddToWatchlist}>Хочу посмотреть</button>
+              <button type="button" className="btn btn-primary" onClick={() => setShowtimesOpen(true)}>
+                {t('movie.buyTicket')}
+              </button>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={() => trailerUrl && setTrailerOpen(true)}
+                disabled={!trailerUrl}
+              >
+                {trailerUrl ? t('movieCard.watchTrailer') : t('movieCard.trailerSoon')}
+              </button>
+              <button type="button" className="btn btn-secondary" onClick={handleAddToWatchlist}>
+                {t('movie.wantToWatch')}
+              </button>
             </div>
           </div>
         </div>
       </div>
-      <div className="tabs-bar-wrap" ref={tabsBarRef} style={{ marginTop: 24 }}>
-        <div className="tabs">
-          {['screenings', 'reviews', 'comments'].map((t) => (
-            <button key={t} type="button" className={`tab ${tab === t ? 'active' : ''}`} data-tab={t} onClick={() => setTab(t)}>
-              {t === 'screenings' && 'Сеансы'}
-              {t === 'reviews' && 'Отзывы'}
-              {t === 'comments' && 'Обсуждение'}
-            </button>
-          ))}
-        </div>
-        <div className="home-tabs-indicator" style={tabIndicatorStyle} />
-      </div>
-
-      {tab === 'screenings' && (
-        <div className="glass-card" style={{ padding: 24 }}>
-          {screenings.length === 0 ? <p>Нет доступных сеансов</p> : (
-            Object.entries(screeningsByDate).map(([date, items]) => (
-              <div key={date} className="screenings-day">
-                <div className="screenings-day-header">{date}</div>
-                <div className="screenings-grid">
-                  {items.map((s) => (
-                    <div key={s.id} className="screening-card">
-                      <div className="screening-main">
-                        <span className="screening-time">{s._timeStr}</span>
-                        <span className="screening-meta">{s.hallName} · {s.format}</span>
-                      </div>
-                      <div className="screening-bottom">
-                        <span className="screening-price">{s.basePrice} BYN</span>
-                        <Link to={`/booking?screeningId=${s.id}`} className="btn btn-primary btn-sm">Выбрать</Link>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ))
-          )}
-        </div>
-      )}
-
-      {tab === 'reviews' && (
-        <>
+      <div className="container">
+        <section className="movie-discussion-block">
+          <h2 className="section-title">{t('movie.tabDiscussion')}</h2>
           {isAuthenticated && (
             <form onSubmit={handleSubmitReview} className="glass-card" style={{ padding: 24, marginBottom: 24 }}>
               <div className="form-group">
-                <label>Ваш отзыв</label>
+                <label>{t('movie.yourReview')}</label>
                 <textarea value={reviewText} onChange={(e) => setReviewText(e.target.value)} rows={3} />
               </div>
-              <button type="submit" className="btn btn-primary">Отправить</button>
+              <button type="submit" className="btn btn-primary">
+                {t('movie.submitReview')}
+              </button>
             </form>
           )}
-          {reviews.map((r) => (
-            <div key={r.id} className="glass-card review-card">
-              <div className="review-header">
-                <div className="review-avatar">{r.userName?.[0]}</div>
-                <div>
-                  <span className="review-author">{r.userName}</span>
-                  <span className="review-date"> · {new Date(r.createdAt).toLocaleDateString('ru')}</span>
+          {discussionFeed.map((item) =>
+            item.type === 'comment' ? (
+              <div key={item.key} className="glass-card comment-card">
+                <div className="comment-header">
+                  <div className="comment-avatar">{item.userName?.[0]}</div>
+                  <span className="comment-author">{item.userName}</span>
+                  <span className="comment-date">{new Date(item.createdAt).toLocaleDateString(dateLocale)}</span>
+                  {isAdmin && (
+                    <button type="button" className="admin-inline-delete" onClick={() => handleModerateDelete(item)}>
+                      {t('admin.delete')}
+                    </button>
+                  )}
                 </div>
-              </div>
-              <div className="review-text">{r.text}</div>
-            </div>
-          ))}
-        </>
-      )}
-
-      {tab === 'comments' && (
-        <>
-          {isAuthenticated && (
-            <form onSubmit={handleSubmitComment} className="glass-card" style={{ padding: 24, marginBottom: 24 }}>
-              <div className="form-group">
-                <label>Комментарий</label>
-                <textarea value={commentText} onChange={(e) => setCommentText(e.target.value)} rows={2} />
-              </div>
-              <button type="submit" className="btn btn-primary">Отправить</button>
-            </form>
-          )}
-          {comments.map((c) => (
-            <div key={c.id} className="glass-card comment-card">
-              <div className="comment-header">
-                <div className="comment-avatar">{c.userName?.[0]}</div>
-                <span className="comment-author">{c.userName}</span>
-                <span className="comment-date">{new Date(c.createdAt).toLocaleDateString('ru')}</span>
-              </div>
-              <div className="comment-text">{c.text}</div>
-              {c.replies?.length > 0 && (
-                <div className="comment-replies">
-                  {c.replies.map((r) => (
-                    <div key={r.id} className="comment-card">
-                      <div className="comment-header">
-                        <div className="comment-avatar">{r.userName?.[0]}</div>
-                        <span className="comment-author">{r.userName}</span>
+                <div className="comment-text">{item.text}</div>
+                {item.replies?.length > 0 && (
+                  <div className="comment-replies">
+                    {item.replies.map((r) => (
+                      <div key={r.id} className="comment-card">
+                        <div className="comment-header">
+                          <div className="comment-avatar">{r.userName?.[0]}</div>
+                          <span className="comment-author">{r.userName}</span>
+                          {isAdmin && (
+                            <button
+                              type="button"
+                              className="admin-inline-delete"
+                              onClick={() => handleModerateDelete({ type: 'comment', id: r.id })}
+                            >
+                              {t('admin.delete')}
+                            </button>
+                          )}
+                        </div>
+                        <div className="comment-text">{r.text}</div>
                       </div>
-                      <div className="comment-text">{r.text}</div>
-                    </div>
-                  ))}
+                    ))}
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div key={item.key} className="glass-card review-card">
+                <div className="review-header">
+                  <div className="review-avatar">{item.userName?.[0]}</div>
+                  <div>
+                    <span className="review-author">{item.userName}</span>
+                    <span className="review-date">
+                      {' '}
+                      · {new Date(item.createdAt).toLocaleDateString(dateLocale)}
+                    </span>
+                  </div>
+                  {isAdmin && (
+                    <button type="button" className="admin-inline-delete" onClick={() => handleModerateDelete(item)}>
+                      {t('admin.delete')}
+                    </button>
+                  )}
                 </div>
-              )}
-            </div>
-          ))}
-        </>
-      )}
+                <div className="review-text">{item.text}</div>
+              </div>
+            )
+          )}
+          {discussionFeed.length === 0 && (
+            <p style={{ color: 'var(--color-text-secondary)' }}>{t('movie.noReviews')}</p>
+          )}
+        </section>
 
       <div className="section">
-        <h2 className="section-title">Похожие фильмы</h2>
+        <h2 className="section-title">{t('movie.similar')}</h2>
         <div className="movies-row">
-          {(similar || []).filter((m) => m && m.id).map((m) => <MovieCard key={m.id} movie={m} />)}
+          {(similar || [])
+            .filter((m) => m && m.id)
+            .map((m) => (
+              <MovieCard key={m.id} movie={m} audioParam={audioKey || undefined} />
+            ))}
         </div>
         {(!similar || similar.length === 0) && (
-          <p style={{ marginTop: 8, color: 'var(--color-text-secondary)' }}>Нет похожих фильмов</p>
+          <p style={{ marginTop: 8, color: 'var(--color-text-secondary)' }}>{t('movie.noSimilar')}</p>
         )}
       </div>
-    </div>
+      </div>
+      <TrailerModal
+        open={trailerOpen}
+        onClose={() => setTrailerOpen(false)}
+        trailerUrl={trailerUrl}
+        title={displayTitle}
+      />
+      {showtimesOpen && (
+        <div
+          className="modal-backdrop modal-backdrop--glass showtimes-modal-backdrop active"
+          role="presentation"
+          onClick={closeShowtimes}
+        >
+          <ModalCornerClose
+            onClose={closeShowtimes}
+            ariaLabel={t('movie.showtimesModalClose')}
+          />
+          <div
+            className="modal modal--showtimes"
+            role="dialog"
+            aria-modal="true"
+            aria-label={t('movie.showtimesModalTitle')}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="showtimes-modal__header">
+              <h3 className="showtimes-modal__heading">{t('movie.showtimesModalTitle')}</h3>
+              <div className="showtimes-modal__movie">
+                <div className="showtimes-modal__poster-wrap">
+                  <MoviePoster movie={movie} className="showtimes-modal__poster" alt={displayTitle} />
+                </div>
+                <div className="showtimes-modal__movie-info">
+                  <h4 className="showtimes-modal__movie-title">{displayTitle}</h4>
+                  <p className="showtimes-modal__movie-meta">
+                    {[
+                      movie.year,
+                      movie.ageRating,
+                      movieOverride?.durationLabel || formatDurationMinutes(movie.duration),
+                      (movieOverride?.genres || movie.genres || []).join(', '),
+                    ]
+                      .filter(Boolean)
+                      .join(' · ')}
+                  </p>
+                </div>
+              </div>
+            </div>
+            <div className="showtimes-modal__content">
+              <div className="movie-audio-filter-row screenings-panel__filter">
+                <label id="movie-audio-select-label" className="catalog-audio-label" htmlFor="movie-audio-select">
+                  {t('movie.audioFilterLabel')}
+                </label>
+                <RolloutSelect
+                  id="movie-audio-select"
+                  value={audioKey}
+                  onChange={onAudioFilterChange}
+                  options={audioOptions}
+                  variant="chip"
+                  aria-labelledby="movie-audio-select-label"
+                />
+              </div>
+              {filteredScreenings.length === 0 ? (
+                <p>{audioKey ? t('movie.noScreeningsFiltered') : t('movie.noScreenings')}</p>
+              ) : (
+                Object.entries(screeningsByDate).map(([date, items]) => {
+                  const minPrice = dayMinPrice(items);
+                  return (
+                    <div key={date} className="screenings-day">
+                      <div className="screenings-day-header">
+                        <span className="screenings-day-header__date">{date}</span>
+                        {items.length > 1 && minPrice != null && (
+                          <span className="screenings-day-header__from">
+                            {t('movie.screeningFromPrice', { price: minPrice.toFixed(2) })}
+                            {' '}
+                            <CurrencySymbol />
+                          </span>
+                        )}
+                      </div>
+                      <div className="screenings-grid">
+                        {items.map((s) => (
+                          <ScreeningChip key={s.id} screening={s} dayScreenings={items} />
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+    </>
   );
 }

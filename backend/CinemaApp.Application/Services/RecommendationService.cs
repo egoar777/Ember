@@ -1,3 +1,4 @@
+using CinemaApp.Application;
 using CinemaApp.Application.DTOs;
 using CinemaApp.Application.Interfaces;
 using CinemaApp.Data;
@@ -9,53 +10,69 @@ namespace CinemaApp.Application.Services;
 public class RecommendationService : IRecommendationService
 {
     private readonly CinemaDbContext _db;
+    private readonly IMooonCinemaSyncService _mooonSync;
 
-    public RecommendationService(CinemaDbContext db)
+    public RecommendationService(CinemaDbContext db, IMooonCinemaSyncService mooonSync)
     {
         _db = db;
+        _mooonSync = mooonSync;
     }
 
     public async Task<List<HomeCollectionDto>> GetHomeCollectionsAsync(int? userId)
     {
+        var mooonMap = await _mooonSync.GetCachedFilmImageMapAsync();
         var collections = new List<HomeCollectionDto>();
 
         var popular = await _db.Movies
             .Include(m => m.Genres)
+            .Where(m => !m.IsArchived)
             .OrderByDescending(m => m.RatingCount)
-            .Take(10)
+            .ThenByDescending(m => m.AverageRating)
+            .Take(15)
             .ToListAsync();
         collections.Add(new HomeCollectionDto(
             "Популярное сейчас",
             "popular",
-            popular.Select(MapToMovieListDto).ToList()));
-
-        var premiereMovieIds = await _db.Screenings
-            .Where(s => s.IsPremiere)
-            .Select(s => s.MovieId)
-            .Distinct()
-            .Take(10)
-            .ToListAsync();
-        var premieres = (await _db.Movies
-            .Include(m => m.Genres)
-            .Where(m => premiereMovieIds.Contains(m.Id))
-            .ToListAsync())
-            .OrderBy(m => premiereMovieIds.IndexOf(m.Id))
-            .ToList();
-        collections.Add(new HomeCollectionDto(
-            "Премьеры",
-            "premieres",
-            premieres.Select(MapToMovieListDto).ToList()));
+            popular.Select(m => MapToMovieListDto(m, mooonMap)).ToList()));
 
         var exclusive = await _db.Movies
             .Include(m => m.Genres)
-            .Where(m => m.IsExclusive)
+            .Where(m => !m.IsArchived && m.IsExclusive)
             .OrderByDescending(m => m.AverageRating)
             .Take(10)
             .ToListAsync();
         collections.Add(new HomeCollectionDto(
             "Эксклюзив",
             "exclusive",
-            exclusive.Select(MapToMovieListDto).ToList()));
+            exclusive.Select(m => MapToMovieListDto(m, mooonMap)).ToList()));
+
+        var plus = await _db.Movies
+            .Include(m => m.Genres)
+            .Where(m => !m.IsArchived && (m.IsExclusive || m.AverageRating >= 7.5))
+            .OrderByDescending(m => m.AverageRating)
+            .Take(10)
+            .ToListAsync();
+        if (plus.Count == 0)
+        {
+            plus = popular.Take(10).ToList();
+        }
+        collections.Add(new HomeCollectionDto(
+            "Ember+",
+            "plus",
+            plus.Select(m => MapToMovieListDto(m, mooonMap)).ToList()));
+
+        var kids = (await _db.Movies
+            .Include(m => m.Genres)
+            .Where(m => !m.IsArchived && m.AgeRating != null)
+            .ToListAsync())
+            .Where(m => MovieAgeRatingHelper.IsKidsFriendly(m.AgeRating))
+            .OrderByDescending(m => m.Year)
+            .Take(10)
+            .ToList();
+        collections.Add(new HomeCollectionDto(
+            "Детям",
+            "kids",
+            kids.Select(m => MapToMovieListDto(m, mooonMap)).ToList()));
 
         if (userId != null)
         {
@@ -71,19 +88,19 @@ public class RecommendationService : IRecommendationService
 
             var forYou = await _db.Movies
                 .Include(m => m.Genres)
-                .Where(m => !ratedMovieIds.Contains(m.Id) && m.Genres.Any(g => userGenreIds.Contains(g.Id)))
+                .Where(m => !m.IsArchived && !ratedMovieIds.Contains(m.Id) && m.Genres.Any(g => userGenreIds.Contains(g.Id)))
                 .OrderByDescending(m => m.AverageRating)
                 .Take(10)
                 .ToListAsync();
             collections.Add(new HomeCollectionDto(
                 "Для вас",
                 "for-you",
-                forYou.Select(MapToMovieListDto).ToList()));
+                forYou.Select(m => MapToMovieListDto(m, mooonMap)).ToList()));
         }
 
         var topRated = await _db.Movies
             .Include(m => m.Genres)
-            .Where(m => m.RatingCount > 100)
+            .Where(m => !m.IsArchived && m.RatingCount > 100)
             .OrderByDescending(m => m.AverageRating)
             .Take(10)
             .ToListAsync();
@@ -91,7 +108,7 @@ public class RecommendationService : IRecommendationService
         {
             topRated = await _db.Movies
                 .Include(m => m.Genres)
-                .Where(m => m.RatingCount > 0)
+                .Where(m => !m.IsArchived && m.RatingCount > 0)
                 .OrderByDescending(m => m.AverageRating)
                 .Take(10)
                 .ToListAsync();
@@ -99,16 +116,17 @@ public class RecommendationService : IRecommendationService
         collections.Add(new HomeCollectionDto(
             "Лучшие по рейтингу",
             "top-rated",
-            topRated.Select(MapToMovieListDto).ToList()));
+            topRated.Select(m => MapToMovieListDto(m, mooonMap)).ToList()));
 
         return collections;
     }
 
     public async Task<List<MovieListDto>> GetRecommendationsForMovieAsync(int movieId, int? userId)
     {
+        var mooonMap = await _mooonSync.GetCachedFilmImageMapAsync();
         var movie = await _db.Movies
             .Include(m => m.Genres)
-            .FirstOrDefaultAsync(m => m.Id == movieId);
+            .FirstOrDefaultAsync(m => m.Id == movieId && !m.IsArchived);
 
         if (movie == null || movie.Genres.Count == 0)
             return [];
@@ -117,16 +135,17 @@ public class RecommendationService : IRecommendationService
 
         var similar = await _db.Movies
             .Include(m => m.Genres)
-            .Where(m => m.Id != movieId && m.Genres.Any(g => genreIds.Contains(g.Id)))
+            .Where(m => !m.IsArchived && m.Id != movieId && m.Genres.Any(g => genreIds.Contains(g.Id)))
             .OrderByDescending(m => m.AverageRating)
             .Take(8)
             .ToListAsync();
 
-        return similar.Select(MapToMovieListDto).ToList();
+        return similar.Select(m => MapToMovieListDto(m, mooonMap)).ToList();
     }
 
     public async Task<AiSearchResponse> AiSearchAsync(string query, int? userId)
     {
+        var mooonMap = await _mooonSync.GetCachedFilmImageMapAsync();
         var genreKeywordMap = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
         {
             ["комедия"] = "comedy",
@@ -202,9 +221,12 @@ public class RecommendationService : IRecommendationService
             Exclusive: null,
             IsPremiere: null,
             Page: 1,
-            PageSize: 20);
+            PageSize: 20,
+            ForKids: null,
+            Featured: null,
+            ScreeningLanguage: null);
 
-        var queryFilter = _db.Movies.Include(m => m.Genres).AsQueryable();
+        var queryFilter = _db.Movies.Where(m => !m.IsArchived).Include(m => m.Genres).AsQueryable();
 
         if (filter.GenreIds is { Length: > 0 } gIds)
             queryFilter = queryFilter.Where(m => m.Genres.Any(g => gIds.Contains(g.Id)));
@@ -212,18 +234,14 @@ public class RecommendationService : IRecommendationService
             queryFilter = queryFilter.Where(m => m.Year >= filter.YearFrom!.Value);
         if (filter.YearTo.HasValue)
             queryFilter = queryFilter.Where(m => m.Year <= filter.YearTo!.Value);
+        var candidates = await queryFilter.ToListAsync();
         if (!string.IsNullOrWhiteSpace(filter.Search))
-        {
-            var s = filter.Search.ToLower();
-            queryFilter = queryFilter.Where(m =>
-                (m.Title != null && m.Title.ToLower().Contains(s)) ||
-                (m.OriginalTitle != null && m.OriginalTitle.ToLower().Contains(s)));
-        }
+            candidates = candidates.Where(m => MovieSearchQuery.Matches(m, filter.Search)).ToList();
 
-        var results = await queryFilter
+        var results = candidates
             .OrderByDescending(m => m.AverageRating)
             .Take(20)
-            .ToListAsync();
+            .ToList();
 
         var interpretedParts = new List<string>();
         if (matchedGenreSlugs.Count > 0)
@@ -239,10 +257,12 @@ public class RecommendationService : IRecommendationService
         return new AiSearchResponse(
             interpretedQuery,
             filter,
-            results.Select(MapToMovieListDto).ToList());
+            results.Select(m => MapToMovieListDto(m, mooonMap)).ToList());
     }
 
-    private static MovieListDto MapToMovieListDto(Movie m)
+    private static MovieListDto MapToMovieListDto(
+        Movie m,
+        IReadOnlyDictionary<int, (string PosterUrl, string? BackdropUrl)>? mooonMap = null)
     {
         return new MovieListDto(
             m.Id,
@@ -253,7 +273,9 @@ public class RecommendationService : IRecommendationService
             m.AgeRating,
             m.AverageRating,
             m.RatingCount,
-            m.PosterUrl,
+            MooonFilmImageUrls.ResolvePosterUrl(m, mooonMap),
+            MooonFilmImageUrls.ResolveBackgroundUrl(m, mooonMap),
+            m.TrailerUrl,
             m.Platforms,
             m.IsExclusive,
             m.Genres.Select(g => g.Name).ToList());

@@ -1,4 +1,13 @@
 const POSTER_OVERRIDES = [
+  // mooon: вертикальный medium (в БД часто остаётся широкий .../photo/...)
+  {
+    match: 'дети леса',
+    url: '/poster-bel.webp',
+  },
+  {
+    match: 'домовенок кузя',
+    url: '/poster-help.webp',
+  },
   {
     // Горничная / прежнее название Красавица
     match: 'горничн',
@@ -15,7 +24,7 @@ const POSTER_OVERRIDES = [
   },
   {
     match: 'королева ринга',
-    url: 'https://kinogo.ec/uploads/posts/2025-05/1746802698_queen-of-the-ring.png',
+    url: '/hero-korolevaringa.jpg',
   },
   {
     match: 'грозовой перевал',
@@ -36,10 +45,28 @@ const POSTER_OVERRIDES = [
   },
 ];
 
-export function getPosterOverride(movie) {
-  if (!movie || !movie.title) return null;
-  const title = String(movie.title).toLowerCase();
-  const found = POSTER_OVERRIDES.find((item) => title.includes(item.match));
-  return found ? found.url : null;
+function titleForMatch(movie) {
+  return String(movie?.title || movie?.movieTitle || '').toLowerCase();
 }
 
+/** Локальная афиша по названию (public/…). */
+export function resolvePosterByTitle(movie) {
+  const title = titleForMatch(movie);
+  if (!title) return null;
+  const found = POSTER_OVERRIDES.find((item) => title.includes(item.match));
+  return found?.url ?? null;
+}
+
+export function getPosterOverride(movie) {
+  if (!movie || !titleForMatch(movie)) return null;
+
+  const apiPoster = movie.posterUrl || movie.backgroundUrl;
+  if (typeof apiPoster === 'string' && /^https?:\/\//i.test(apiPoster.trim())) {
+    return null;
+  }
+
+  const url = resolvePosterByTitle(movie);
+  if (!url || url.startsWith('/')) return null;
+
+  return url;
+}

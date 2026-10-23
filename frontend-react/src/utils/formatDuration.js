@@ -10,4 +10,3 @@ export function formatDurationMinutes(totalMinutes) {
   }
   return `${hours} ч ${minutes} мин`;
 }
-

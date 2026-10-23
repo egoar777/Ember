@@ -13,6 +13,9 @@ public class Booking
     public DateTime? PaidAt { get; set; }
     public string? PaymentProvider { get; set; }
     public string? PaymentReference { get; set; }
+    public string? PromoCode { get; set; }
+    public int BonusPointsUsed { get; set; }
+    public int BonusPointsEarned { get; set; }
 
     public User User { get; set; } = null!;
     public Screening Screening { get; set; } = null!;

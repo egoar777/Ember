@@ -1,3 +1,5 @@
+using CinemaApp.Application;
+using CinemaApp.Application.Common;
 using CinemaApp.Application.DTOs;
 using CinemaApp.Application.Interfaces;
 using CinemaApp.Data;
@@ -10,10 +12,12 @@ namespace CinemaApp.Application.Services;
 public class SocialService : ISocialService
 {
     private readonly CinemaDbContext _db;
+    private readonly IMooonCinemaSyncService _mooonSync;
 
-    public SocialService(CinemaDbContext db)
+    public SocialService(CinemaDbContext db, IMooonCinemaSyncService mooonSync)
     {
         _db = db;
+        _mooonSync = mooonSync;
     }
 
     public async Task<List<UserListDto>> GetUserListsAsync(int userId)
@@ -61,12 +65,12 @@ public class SocialService : ISocialService
     {
         var list = await _db.UserLists.FirstOrDefaultAsync(l => l.Id == listId);
         if (list == null || list.UserId != userId)
-            throw new InvalidOperationException("List not found or access denied.");
+            throw ApiException.NotFound(ErrorCodes.ListNotFound);
 
         var existing = await _db.UserListItems
             .FirstOrDefaultAsync(li => li.UserListId == listId && li.MovieId == movieId);
         if (existing != null)
-            throw new InvalidOperationException("Item already in list.");
+            throw ApiException.BadRequest(ErrorCodes.ItemAlreadyInList);
 
         var item = new UserListItem
         {
@@ -78,12 +82,13 @@ public class SocialService : ISocialService
         _db.UserListItems.Add(item);
         await _db.SaveChangesAsync();
 
+        var mooonMap = await _mooonSync.GetCachedFilmImageMapAsync();
         var movie = await _db.Movies.FindAsync(movieId);
         return new UserListItemDto(
             item.Id,
             item.MovieId,
             movie?.Title ?? "",
-            movie?.PosterUrl,
+            movie != null ? MooonFilmImageUrls.ResolvePosterUrl(movie, mooonMap) : null,
             item.AddedAt);
     }
 
@@ -94,7 +99,7 @@ public class SocialService : ISocialService
             .FirstOrDefaultAsync(li => li.Id == itemId);
 
         if (item == null || item.UserListId != listId || item.UserList.UserId != userId)
-            throw new InvalidOperationException("Item not found or access denied.");
+            throw ApiException.NotFound(ErrorCodes.ItemNotFound);
 
         _db.UserListItems.Remove(item);
         await _db.SaveChangesAsync();
@@ -104,8 +109,9 @@ public class SocialService : ISocialService
     {
         var list = await _db.UserLists.FirstOrDefaultAsync(l => l.Id == listId);
         if (list == null || list.UserId != userId)
-            throw new InvalidOperationException("List not found or access denied.");
+            throw ApiException.NotFound(ErrorCodes.ListNotFound);
 
+        var mooonMap = await _mooonSync.GetCachedFilmImageMapAsync();
         var items = await _db.UserListItems
             .Include(li => li.Movie)
             .Where(li => li.UserListId == listId)
@@ -116,7 +122,7 @@ public class SocialService : ISocialService
             li.Id,
             li.MovieId,
             li.Movie.Title,
-            li.Movie.PosterUrl,
+            MooonFilmImageUrls.ResolvePosterUrl(li.Movie, mooonMap),
             li.AddedAt)).ToList();
     }
 
@@ -124,7 +130,7 @@ public class SocialService : ISocialService
     {
         var movie = await _db.Movies.FindAsync(movieId);
         if (movie == null)
-            throw new InvalidOperationException("Movie not found.");
+            throw ApiException.NotFound(ErrorCodes.MovieNotFound);
 
         var existing = await _db.Ratings
             .Include(r => r.User)
@@ -148,6 +154,8 @@ public class SocialService : ISocialService
             };
             _db.Ratings.Add(rating);
         }
+
+        await _db.SaveChangesAsync();
 
         movie.RatingCount = await _db.Ratings.CountAsync(r => r.MovieId == movieId);
         movie.AverageRating = await _db.Ratings
@@ -211,7 +219,7 @@ public class SocialService : ISocialService
     {
         var reviews = await _db.Reviews
             .Include(r => r.User)
-            .Where(r => r.MovieId == movieId)
+            .Where(r => r.MovieId == movieId && !r.IsHidden)
             .OrderByDescending(r => r.CreatedAt)
             .ToListAsync();
 
@@ -259,7 +267,7 @@ public class SocialService : ISocialService
             .Include(c => c.Replies)
                 .ThenInclude(r => r.Replies)
                     .ThenInclude(rr => rr.User)
-            .Where(c => c.MovieId == movieId && c.ParentCommentId == null)
+            .Where(c => c.MovieId == movieId && c.ParentCommentId == null && !c.IsHidden)
             .OrderByDescending(c => c.CreatedAt)
             .ToListAsync();
 
@@ -269,7 +277,7 @@ public class SocialService : ISocialService
     private static CommentDto MapToCommentDto(Comment c, int depth)
     {
         var replies = depth > 0 && c.Replies.Any()
-            ? c.Replies.OrderBy(r => r.CreatedAt).Select(r => MapToCommentDto(r, depth - 1)).ToList()
+            ? c.Replies.Where(r => !r.IsHidden).OrderBy(r => r.CreatedAt).Select(r => MapToCommentDto(r, depth - 1)).ToList()
             : new List<CommentDto>();
 
         return new CommentDto(
@@ -302,7 +310,7 @@ public class SocialService : ISocialService
     {
         var notification = await _db.Notifications.FirstOrDefaultAsync(n => n.Id == notificationId);
         if (notification == null || notification.UserId != userId)
-            throw new InvalidOperationException("Notification not found or access denied.");
+            throw ApiException.NotFound(ErrorCodes.NotificationNotFound);
 
         notification.IsRead = true;
         await _db.SaveChangesAsync();

@@ -10,6 +10,7 @@ public class Review
     public DateTime? UpdatedAt { get; set; }
     public int Likes { get; set; }
     public int Dislikes { get; set; }
+    public bool IsHidden { get; set; }
 
     public User User { get; set; } = null!;
     public Movie Movie { get; set; } = null!;

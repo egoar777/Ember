@@ -1,0 +1,30 @@
+# Dependencies and build output
+**/node_modules/
+**/bin/
+**/obj/
+**/dist/
+**/coverage/
+
+# Local configuration and runtime data
+.env
+.env.*
+!.env.example
+**/appsettings.Local.json
+**/appsettings.*.Local.json
+**/*.db
+**/*.db-*
+**/*.sqlite*
+backend/CinemaApp.WebApi/wwwroot/uploads/**
+!backend/CinemaApp.WebApi/wwwroot/uploads/news/
+!backend/CinemaApp.WebApi/wwwroot/uploads/news/.gitkeep
+
+# Editor and OS files
+.DS_Store
+._*
+.vs/
+.idea/
+*.user
+*.suo
+*.log
+__pycache__/
+*.pyc

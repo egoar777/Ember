@@ -19,6 +19,13 @@ public class Movie
     public string? TrailerUrl { get; set; }
     public string? Platforms { get; set; }
     public bool IsExclusive { get; set; }
+
+    /// <summary>Внешний id события на mooon.by; null — локальный/сидированный фильм.</summary>
+    public int? ExternalMooonEventId { get; set; }
+
+    /// <summary>Скрыт с витрины (ушёл с афиши mooon), в БД остаётся из‑за связей.</summary>
+    public bool IsArchived { get; set; }
+
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
     public ICollection<Genre> Genres { get; set; } = new List<Genre>();

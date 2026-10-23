@@ -1,6 +1,6 @@
-using System.IdentityModel.Tokens.Jwt;
-using System.Security.Claims;
-using System.Linq;
+using System.Text.Json;
+using CinemaApp.WebApi.Extensions;
+using CinemaApp.Application.Common;
 using CinemaApp.Data;
 using CinemaApp.Domain.Interfaces;
 using Microsoft.AspNetCore.Authorization;
@@ -22,35 +22,7 @@ public class CalendarController : ControllerBase
         _calendarService = calendarService;
     }
 
-    private int UserId
-    {
-        get
-        {
-            var claim = User.FindFirst("sub")?.Value
-                        ?? User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-            if (!string.IsNullOrEmpty(claim))
-                return int.Parse(claim);
-
-            var auth = Request.Headers["Authorization"].FirstOrDefault();
-            if (!string.IsNullOrEmpty(auth) && auth.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
-            {
-                var token = auth.Substring("Bearer ".Length).Trim();
-                try
-                {
-                    var handler = new JwtSecurityTokenHandler();
-                    var jwt = handler.ReadJwtToken(token);
-                    var sub = jwt.Claims.FirstOrDefault(c => c.Type == "sub" || c.Type == ClaimTypes.NameIdentifier)?.Value;
-                    if (!string.IsNullOrEmpty(sub))
-                        return int.Parse(sub);
-                }
-                catch
-                {
-                }
-            }
-
-            throw new UnauthorizedAccessException("User id claim is missing.");
-        }
-    }
+    private int UserId => User.GetRequiredUserId();
 
     [HttpGet("{id:int}/calendar")]
     public async Task<IActionResult> GetCalendarEvent(int id)
@@ -78,7 +50,7 @@ public class CalendarController : ControllerBase
         {
             UserId = UserId,
             Type = "screening_reminder",
-            Payload = $"{{\"screeningId\":{id},\"movie\":\"{screening.Movie.Title}\",\"time\":\"{screening.StartTime:O}\"}}",
+            Payload = JsonSerializer.Serialize(new { screeningId = id, movie = screening.Movie.Title, time = screening.StartTime }),
             IsRead = false
         });
         await _db.SaveChangesAsync();

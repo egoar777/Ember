@@ -1,6 +1,4 @@
-using System.IdentityModel.Tokens.Jwt;
-using System.Security.Claims;
-using System.Linq;
+using CinemaApp.WebApi.Extensions;
 using CinemaApp.Application.DTOs;
 using CinemaApp.Application.Interfaces;
 using Microsoft.AspNetCore.Authorization;
@@ -16,75 +14,26 @@ public class AuthController : ControllerBase
     public AuthController(IAuthService authService) => _authService = authService;
 
     [HttpPost("register")]
-    public async Task<ActionResult<AuthResponse>> Register([FromBody] RegisterRequest request)
-    {
-        try
-        {
-            var result = await _authService.RegisterAsync(request);
-            return Ok(result);
-        }
-        catch (InvalidOperationException ex)
-        {
-            return BadRequest(new { error = ex.Message });
-        }
-    }
+    public async Task<ActionResult<AuthResponse>> Register([FromBody] RegisterRequest request) =>
+        Ok(await _authService.RegisterAsync(request));
 
     [HttpPost("login")]
-    public async Task<ActionResult<AuthResponse>> Login([FromBody] LoginRequest request)
-    {
-        try
-        {
-            var result = await _authService.LoginAsync(request);
-            return Ok(result);
-        }
-        catch (UnauthorizedAccessException ex)
-        {
-            return Unauthorized(new { error = ex.Message });
-        }
-    }
+    public async Task<ActionResult<AuthResponse>> Login([FromBody] LoginRequest request) =>
+        Ok(await _authService.LoginAsync(request));
+
+    [HttpPost("google")]
+    public async Task<ActionResult<AuthResponse>> GoogleLogin([FromBody] GoogleLoginRequest request) =>
+        Ok(await _authService.LoginWithGoogleAsync(request));
 
     [HttpPost("refresh")]
-    public async Task<ActionResult<AuthResponse>> Refresh([FromBody] RefreshRequest request)
-    {
-        try
-        {
-            var result = await _authService.RefreshTokenAsync(request.RefreshToken);
-            return Ok(result);
-        }
-        catch (UnauthorizedAccessException ex)
-        {
-            return Unauthorized(new { error = ex.Message });
-        }
-    }
+    public async Task<ActionResult<AuthResponse>> Refresh([FromBody] RefreshRequest request) =>
+        Ok(await _authService.RefreshTokenAsync(request.RefreshToken));
 
     [Authorize]
     [HttpPost("logout")]
     public async Task<IActionResult> Logout()
     {
-        var claim = User.FindFirst("sub")?.Value
-                    ?? User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-        if (string.IsNullOrEmpty(claim))
-        {
-            var auth = Request.Headers["Authorization"].FirstOrDefault();
-            if (!string.IsNullOrEmpty(auth) && auth.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
-            {
-                var token = auth.Substring("Bearer ".Length).Trim();
-                try
-                {
-                    var handler = new JwtSecurityTokenHandler();
-                    var jwt = handler.ReadJwtToken(token);
-                    claim = jwt.Claims.FirstOrDefault(c => c.Type == "sub" || c.Type == ClaimTypes.NameIdentifier)?.Value;
-                }
-                catch
-                {
-                }
-            }
-        }
-
-        if (string.IsNullOrEmpty(claim))
-            return Unauthorized(new { error = "User id claim is missing." });
-
-        var userId = int.Parse(claim);
+        var userId = User.GetRequiredUserId();
         await _authService.LogoutAsync(userId);
         return Ok();
     }

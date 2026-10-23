@@ -1,6 +1,4 @@
-using System.IdentityModel.Tokens.Jwt;
-using System.Security.Claims;
-using System.Linq;
+using CinemaApp.WebApi.Extensions;
 using CinemaApp.Application.DTOs;
 using CinemaApp.Application.Interfaces;
 using Microsoft.AspNetCore.Mvc;
@@ -14,38 +12,7 @@ public class AiController : ControllerBase
     private readonly IRecommendationService _recommendationService;
     public AiController(IRecommendationService recommendationService) => _recommendationService = recommendationService;
 
-    private int? UserId
-    {
-        get
-        {
-            if (User.Identity?.IsAuthenticated != true)
-                return null;
-
-            var claim = User.FindFirst("sub")?.Value
-                        ?? User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-            if (!string.IsNullOrEmpty(claim))
-                return int.Parse(claim);
-
-            var auth = Request.Headers["Authorization"].FirstOrDefault();
-            if (!string.IsNullOrEmpty(auth) && auth.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
-            {
-                var token = auth.Substring("Bearer ".Length).Trim();
-                try
-                {
-                    var handler = new JwtSecurityTokenHandler();
-                    var jwt = handler.ReadJwtToken(token);
-                    var sub = jwt.Claims.FirstOrDefault(c => c.Type == "sub" || c.Type == ClaimTypes.NameIdentifier)?.Value;
-                    if (!string.IsNullOrEmpty(sub))
-                        return int.Parse(sub);
-                }
-                catch
-                {
-                }
-            }
-
-            return null;
-        }
-    }
+    private int? UserId => User.GetUserIdOrNull();
 
     [HttpGet("recommendations/home")]
     public async Task<IActionResult> GetHomeCollections()

@@ -1,6 +1,14 @@
 @CinemaApp.WebApi_HostAddress = http://localhost:5255
 
-GET {{CinemaApp.WebApi_HostAddress}}/weatherforecast/
+GET {{CinemaApp.WebApi_HostAddress}}/api/movies?pageSize=10
 Accept: application/json
 
 ###
+
+GET {{CinemaApp.WebApi_HostAddress}}/api/genres/with-ids
+Accept: application/json
+
+###
+
+GET {{CinemaApp.WebApi_HostAddress}}/api/news
+Accept: application/json

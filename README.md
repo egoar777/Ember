@@ -2,6 +2,33 @@
 
 Веб-приложение кинотеатра: афиша, поиск фильмов, расписание, выбор мест, корзина, билеты и личный кабинет. Интерфейс доступен на русском, английском и белорусском языках.
 
+## Скриншоты
+
+### Главная страница
+
+![Главная страница Ember](docs/screenshots/home.webp)
+
+<details>
+<summary>Каталог фильмов</summary>
+
+![Каталог фильмов](docs/screenshots/catalog.webp)
+
+</details>
+
+<details>
+<summary>Страница фильма</summary>
+
+![Страница фильма](docs/screenshots/movie.webp)
+
+</details>
+
+<details>
+<summary>Выбор мест и бронирование</summary>
+
+![Выбор мест и бронирование](docs/screenshots/booking.webp)
+
+</details>
+
 ## Технологии
 
 - React 19, React Router, Vite 7, Tailwind CSS;
